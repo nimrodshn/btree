@@ -1,25 +1,27 @@
-pub struct BTree<'a> {
+use std::io::Error;
+
+pub trait Persist {
+    fn write_to_file() -> Result<u32, Error>;
+}
+
+pub struct BTree<'a, T> where T: Ord {
     branching_factor : u32,
-    root : &'a mut Node<'a>,
+    root : &'a mut Node<'a, T>,
 }
 
-pub struct Node<'a> {
-    keys : Vec<&'a [u8]>,
-    pointers : Vec<Node<'a>>
+pub struct Node<'a, T> where T: Ord {
+    keys : Vec<T>,
+    pointers : Vec<&'a Node<'a, T>>
 }
 
-impl <'a> BTree<'a> {
-    fn new(root: &'a mut Node<'a>, branching_factor: u32) -> BTree<'a> {
+impl <'a, T> BTree<'a, T> where T: Ord  {
+    fn new(root: &'a mut Node<'a,T>, branching_factor: u32) -> BTree<'a, T> {
         BTree{
             root,
             branching_factor
         }
     }
-
-    // TODO: implement me.
-    fn insert(&mut self, key: &[u8]) {}
 }
-
 
 #[cfg(test)]
 mod tests {
