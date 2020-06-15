@@ -1,31 +1,32 @@
 use std::error::Error;
 use std::option::Option;
 
-pub struct Node<'a, T>
-where
-    T: Ord,
+pub mod file;
+
+pub struct KeyValuePair{
+    key: String,
+    value: String,
+}
+
+/// Node represents a node in the BTree occupied by a single page in memory.
+pub struct Node
 {
-    pub keys: Vec<&'a T>,
-    pub children: Vec<Node<'a, T>>,
-    pub parent: Option<&'a Node<'a, T>>,
+    pub offset: u32,
+    pub parent_offset: u32,
     pub leaf: bool,
 }
 
-impl<'a, T> Node<'a, T>
-where
-    T: Ord,
+impl Node 
 {
     pub fn new(
-        keys: Vec<&'a T>,
-        children: Vec<Node<'a, T>>,
-        parent: Option<&'a Node<'a,T>>,
         leaf: bool,
-    ) -> Node<'a, T> {
+        offset: u32,
+        parent_offset: u32,
+    ) -> Node {
         Node {
-            keys,
-            children,
-            parent,
             leaf,
+            offset,
+            parent_offset,
         }
     }
 }
