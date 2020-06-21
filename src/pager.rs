@@ -27,23 +27,24 @@ impl<'a> Pager<'a> {
 
     /// find_page looks up a node which holds the value of a certain key.
     /// If no such node exist an error of type KeyNotFound is returned.
-    /// 
+    ///
     /// find_page first tries to find the node in the in-memory cache and if the search misses.
     /// we will look up the corresponding node from file.
-    pub fn find_page(&mut self, key: &String) -> Result<&Node, Error> {
+    pub fn find_node(&mut self, key: &String) -> Result<&Node, Error> {
         match self.cache.get(key) {
             Some(node) => return Ok(*node),
-            None => return self.load_page_from_memory(key),
+            None => return self.load_node_from_memory(key),
         };
     }
 
-    pub fn load_page_from_memory(&mut self, key: &String) -> Result<&Node, Error> {
+    pub fn load_node_from_memory(&mut self, key: &String) -> Result<&Node, Error> {
         let mut root_page = vec![0u8; PAGE_SIZE as usize];
         match self.fd.read_exact(&mut root_page) {
             Err(_e) => return Err(Error::UnexpectedError),
             Ok(v) => v,
         };
-        let root = Node::page_to_node(ROOT_NODE_OFFSET, &root_page);
+        let root = Node::page_to_node(ROOT_NODE_OFFSET, &root_page)?;
+
         Err(Error::KeyNotFound)
     }
 }
