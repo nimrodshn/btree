@@ -22,12 +22,12 @@ const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_PO
 /// Leaf node header layout
 const LEAF_NODE_NUM_PAIRS_SIZE: usize = size_of::<usize>();
 const LEAF_NODE_NUM_PAIRS_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
-const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_PAIRS_OFFSET;
+const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_PAIRS_SIZE;
 
 /// Leaf body layout.
 const LEAF_NODE_SPACE_FOR_KEY_VALUE_PAIRS: usize = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
-const KEY_SIZE_FIELD: usize = 12;
-const VALUE_SIZE_FIELD: usize = 12;
+const KEY_SIZE_FIELD: usize = size_of::<usize>();
+const VALUE_SIZE_FIELD: usize = size_of::<usize>();
 
 #[derive(PartialEq)]
 pub enum NodeType {
@@ -39,8 +39,8 @@ pub enum NodeType {
 impl From<u8> for NodeType {
     fn from(orig: u8) -> Self {
         match orig {
-            0x1 => return NodeType::Internal,
-            0x2 => return NodeType::Leaf,
+            0x01 => return NodeType::Internal,
+            0x02 => return NodeType::Leaf,
             _ => return NodeType::Unknown,
         };
     }
@@ -77,24 +77,25 @@ impl Node {
                         ..LEAF_NODE_NUM_PAIRS_OFFSET + LEAF_NODE_NUM_PAIRS_SIZE],
                 ));
                 let mut res = Vec::<KeyValuePair>::new();
-                let mut offset = LEAF_NODE_SPACE_FOR_KEY_VALUE_PAIRS;
-
-                for _i in 1..num_keys_val_pairs {
+                let mut offset = LEAF_NODE_HEADER_SIZE;
+               
+                for _i in 0..num_keys_val_pairs {
                     let (key_raw, size) =
                         get_field_from_offset_and_size(page, offset, KEY_SIZE_FIELD);
                     let key = match str::from_utf8(key_raw) {
                         Ok(key) => key,
                         Err(_) => return None,
                     };
-                    offset = offset + size;
-
+                    // Increment offset after getting the key.
+                    offset = offset + size + KEY_SIZE_FIELD;
                     let (value_raw, size) =
                         get_field_from_offset_and_size(page, offset, VALUE_SIZE_FIELD);
                     let value = match str::from_utf8(value_raw) {
                         Ok(val) => val,
                         Err(_) => return None,
                     };
-                    offset = offset + size;
+                    // Increment the offset after getting the value.
+                    offset = offset + size + VALUE_SIZE_FIELD;
                     res.push(KeyValuePair::new(key.to_string(), value.to_string()))
                 }
                 return Some(res);
@@ -103,9 +104,17 @@ impl Node {
         };
     }
 
+    fn is_root(b: u8) -> bool {
+        match b {
+            0x01 => true,
+            _ => false,
+        }
+    }
+
+    // page_to_node converts a raw page of memory to an in-memory node.
     pub fn page_to_node(offset: usize, page: &[u8]) -> Result<Node, Error> {
         let is_root = Node::is_root(page[IS_ROOT_OFFSET]);
-        let node_type = NodeType::from(page[NODE_TYPE_OFFSET + NODE_TYPE_SIZE]);
+        let node_type = NodeType::from(page[NODE_TYPE_OFFSET]);
         if node_type == NodeType::Unknown {
             return Err(Error::UnexpectedError);
         }
@@ -113,17 +122,10 @@ impl Node {
 
         return Ok(Node::new(node_type, offset, parent_pointer_offset, is_root));
     }
-
-    fn is_root(b: u8) -> bool {
-        match b {
-            0x1 => true,
-            _ => false,
-        }
-    }
 }
 
 // to_usize attempts to convert a silce of bytes to an array of usize size.
-pub fn to_usize(slice: &[u8]) -> [u8; size_of::<usize>()] {
+fn to_usize(slice: &[u8]) -> [u8; size_of::<usize>()] {
     slice.try_into().expect("slice with incorrect length")
 }
 
@@ -136,4 +138,69 @@ fn get_field_from_offset_and_size(
     let size = usize::from_be_bytes(to_usize(&page[offset..offset + field_size]));
     offset = offset + field_size;
     (&page[offset..offset + size], size)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::node::{KEY_SIZE_FIELD, LEAF_NODE_HEADER_SIZE, PAGE_SIZE, VALUE_SIZE_FIELD, PARENT_POINTER_OFFSET, Node};
+    use crate::error::Error;
+    #[test]
+    fn page_to_node_works() -> Result<(), Error>{
+        const DATA_LEN : usize = LEAF_NODE_HEADER_SIZE + KEY_SIZE_FIELD + VALUE_SIZE_FIELD + 10;
+        let page_data: [u8; DATA_LEN] = [
+            0x01,                                                                   // Is-Root byte.
+            0x02,                                                                   // Node type byte.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,                         // Parent offset.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,                         // Number of Key-Value pairs.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,                         // Key size.
+            0x68, 0x65, 0x6c, 0x6c, 0x6f,                                           // "hello"
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,                         // Value size.
+            0x77, 0x6f, 0x72, 0x6c, 0x64,                                           // "world"
+        ];
+        let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
+        let page = [&page_data[..], &junk[..]].concat();
+        let offset = PAGE_SIZE * 2;
+        let node = Node::page_to_node(offset, &page)?;
+
+        assert_eq!(node.is_root, true);
+        assert_eq!(node.offset, offset);
+        assert_eq!(node.parent_pointer_offset, offset + PARENT_POINTER_OFFSET);
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_key_value_pairs_works() -> Result<(), Error> {
+        const DATA_LEN : usize = LEAF_NODE_HEADER_SIZE + KEY_SIZE_FIELD + VALUE_SIZE_FIELD + 10;
+        let page_data: [u8; DATA_LEN] = [
+            0x01,                                                                   // Is-Root byte.
+            0x02,                                                                   // Node type byte.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,                         // Parent offset.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,                         // Number of Key-Value pairs.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,                         // Key size.
+            0x68, 0x65, 0x6c, 0x6c, 0x6f,                                           // "hello"
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,                         // Value size.
+            0x77, 0x6f, 0x72, 0x6c, 0x64,                                           // "world"
+        ];
+        let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
+        let page = [&page_data[..], &junk[..]].concat();
+        let offset = PAGE_SIZE * 2;
+        let node = Node::page_to_node(offset, &page)?;
+
+        let kv = match node.get_key_value_pairs(&page) {
+            Some(kv) => kv,
+            None => return Err(Error::UnexpectedError)
+        };
+
+        assert_eq!(kv.len(), 1);
+        let first_kv = match kv.get(0) {
+            Some(kv) => kv,
+            None => return Err(Error::UnexpectedError)
+        };
+
+        assert_eq!(first_kv.key, "hello");
+        assert_eq!(first_kv.value, "world");
+        
+        Ok(())
+    }
 }
