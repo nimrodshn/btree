@@ -34,6 +34,7 @@ impl Clone for NodeType {
     }
 }
 
+// Casts a byte to a NodeType.
 impl From<u8> for NodeType {
     fn from(orig: u8) -> Self {
         match orig {
