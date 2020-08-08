@@ -12,14 +12,25 @@ const NODE_TYPE_OFFSET: usize = 1;
 const PARENT_POINTER_OFFSET: usize = 2;
 const PARENT_POINTER_SIZE: usize = size_of::<usize>();
 const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
+
 /// Leaf node header layout
 const LEAF_NODE_NUM_PAIRS_SIZE: usize = size_of::<usize>();
 const LEAF_NODE_NUM_PAIRS_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
 const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_PAIRS_SIZE;
 
-/// Leaf body layout.
+/// Leaf node body layout.
 const KEY_SIZE_FIELD: usize = size_of::<usize>();
 const VALUE_SIZE_FIELD: usize = size_of::<usize>();
+
+/// Internal header layout
+const INTERNAL_NODE_NUM_CHILDREN_SIZE: usize = size_of::<usize>();
+const INTERNAL_NODE_NUM_CHILDREN_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
+const INTERNAL_NODE_NUM_KEYS_SIZE: usize = size_of::<usize>();
+const INTERNAL_NODE_NUM_KEYS_OFFSET: usize = INTERNAL_NODE_NUM_CHILDREN_OFFSET + INTERNAL_NODE_NUM_CHILDREN_SIZE;
+const INTERNAL_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_CHILDREN_SIZE + INTERNAL_NODE_NUM_KEYS_SIZE;
+
+/// Internal node body layout
+const CHILD_PTR_SIZE: usize = size_of::<usize>();
 
 #[derive(PartialEq, Copy)]
 pub enum NodeType {
@@ -68,6 +79,8 @@ impl Node {
         }
     }
 
+    /// get_key_value_pairs returns a list of key value pairs in case of a leaf node,
+    /// otherwise, returns an error.
     pub fn get_key_value_pairs(&self, page: &[u8]) -> Result<Vec<KeyValuePair>, Error> {
         match self.node_type {
             NodeType::Leaf => {
@@ -99,6 +112,28 @@ impl Node {
                 }
                 return Ok(res);
             }
+            _ => return Err(Error::UnexpectedError),
+        };
+    }
+
+    /// get_children returns the children of a certain node in case of an internal node,
+    /// otherwise, returns an error.
+    pub fn get_children(&self, page: &[u8]) -> Result<Vec<usize>, Error> {
+        match self.node_type {
+            NodeType::Internal => {
+                let num_children = usize::from_be_bytes(to_usize(
+                    &page[INTERNAL_NODE_NUM_CHILDREN_OFFSET
+                        ..INTERNAL_NODE_NUM_CHILDREN_OFFSET + INTERNAL_NODE_NUM_CHILDREN_SIZE],
+                ));
+                let mut result = Vec::<usize>::new();
+                let offset = INTERNAL_NODE_HEADER_SIZE;
+                for _i in 1..num_children {
+                   let (child_raw, _) = get_field_from_offset_and_size(page, offset, CHILD_PTR_SIZE); 
+                   let child_ptr = usize::from_be_bytes(to_usize(child_raw));
+                   result.push(child_ptr);
+                }
+                return Ok(result)
+            },
             _ => return Err(Error::UnexpectedError),
         };
     }
