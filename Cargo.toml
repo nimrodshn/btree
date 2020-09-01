@@ -5,4 +5,5 @@ authors = ["nshneor <nshneor@redhat.com>"]
 edition = "2018"
 
 [dependencies]
+byteorder = "1.3.4"
 uuid = { version = "0.8", features = ["serde", "v4"] }

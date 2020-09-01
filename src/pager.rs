@@ -1,14 +1,11 @@
 use crate::error::Error;
 use crate::node::{Node, NodeType};
+use crate::page::PAGE_SIZE;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
-
-/// A single page size.
-/// Each page represents a node in the BTree.
-pub const PAGE_SIZE: usize = 4096;
 
 // Root Node offset is always at zero.
 pub const ROOT_NODE_OFFSET: usize = 0;
