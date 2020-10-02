@@ -1,6 +1,6 @@
+use crate::error::Error;
 use std::convert::TryFrom;
 use std::mem::size_of;
-use crate::error::Error;
 
 /// A single page size.
 /// Each page represents a node in the BTree.
@@ -24,20 +24,16 @@ impl Page {
         }
     }
 
-    pub fn get_bytes(&self) -> Box<[u8]> {
-        self.data
-    }
-
     /// Fetches a value calculated as BigEndian, sized to usize.
     /// This function may error as the value might not fit into a usize.
     pub fn get_value_from_offset(&self, offset: usize) -> Result<usize, Error> {
         let bytes = &self.data[offset..offset + PTR_SIZE];
-        let Value(res) = Value::try_from(bytes)?;   
+        let Value(res) = Value::try_from(bytes)?;
         Ok(res)
     }
 
-    pub fn get_ptr_from_offset(&self, offset: usize) -> &[u8] {
-        &self.data[offset .. offset+PTR_SIZE]
+    pub fn get_ptr_from_offset(&self, offset: usize, size: usize) -> &[u8] {
+        &self.data[offset..offset + size]
     }
 }
 
@@ -48,13 +44,10 @@ impl TryFrom<&[u8]> for Value {
 
     fn try_from(arr: &[u8]) -> Result<Self, Self::Error> {
         if arr.len() > PTR_SIZE {
-            return Err(Error::TryFromSliceError(format!(
-                "Unexpected Error: Array recieved is larger than the maximum allowed size of: {}",
-                PTR_SIZE
-            )));
+            return Err(Error::TryFromSliceError("Unexpected Error: Array recieved is larger than the maximum allowed size of: 4096B."));
         }
 
-        let truncated_arr = [0u8; PTR_SIZE];
+        let mut truncated_arr = [0u8; PTR_SIZE];
         for (i, item) in arr.iter().enumerate() {
             truncated_arr[i] = *item;
         }

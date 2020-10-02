@@ -1,8 +1,5 @@
-use crate::error::Error;
 use crate::node::Node;
 use crate::pager::Pager;
-use std::path::Path;
-use uuid::Uuid;
 
 /// struct represents an on-disk (persisted) Btree implementation
 /// Each node is persisted in itself where the leaf nodes contain the values.

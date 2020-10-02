@@ -1,9 +1,13 @@
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::page::{Page, PTR_SIZE, PAGE_SIZE};
+use crate::page::{Page, PAGE_SIZE, PTR_SIZE};
 use std::str;
 
-/// Common Node header layout.
+const MAX_BRANCHING_FACTOR: usize = 200;
+const MIN_BRANCHING_FACTOR: usize = 100;
+const INTERNAL_NODE_KEYS_LIMIT: usize = MAX_BRANCHING_FACTOR - 1;
+
+/// Common Node header layout (Ten bytes in total)
 const IS_ROOT_SIZE: usize = 1;
 const IS_ROOT_OFFSET: usize = 0;
 const NODE_TYPE_SIZE: usize = 1;
@@ -12,38 +16,38 @@ const PARENT_POINTER_OFFSET: usize = 2;
 const PARENT_POINTER_SIZE: usize = PTR_SIZE;
 const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
 
-/// Leaf node header layout
+/// Leaf node header layout (Eighteen bytes in total)
+///
+// Space for keys and values: PAGE_SIZE - LEAF_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
 const LEAF_NODE_NUM_PAIRS_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
 const LEAF_NODE_NUM_PAIRS_SIZE: usize = PTR_SIZE;
 const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_PAIRS_SIZE;
 
-/// Leaf node body layout.
-const KEY_SIZE_FIELD: usize = PTR_SIZE;
-const VALUE_SIZE_FIELD: usize = PTR_SIZE;
-
-/// Internal header layout
-const INTERNAL_NODE_NUM_CHILDREN_SIZE: usize = PTR_SIZE;
+/// Internal header layout (Eighteen bytes in total)
+///
+// Space for children and keys: PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
 const INTERNAL_NODE_NUM_CHILDREN_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
-const INTERNAL_NODE_NUM_KEYS_SIZE: usize = PTR_SIZE;
-const INTERNAL_NODE_NUM_KEYS_OFFSET: usize =
-    INTERNAL_NODE_NUM_CHILDREN_OFFSET + INTERNAL_NODE_NUM_CHILDREN_SIZE;
-const INTERNAL_NODE_HEADER_SIZE: usize =
-    COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_CHILDREN_SIZE + INTERNAL_NODE_NUM_KEYS_SIZE;
+const INTERNAL_NODE_NUM_CHILDREN_SIZE: usize = PTR_SIZE;
+const INTERNAL_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_CHILDREN_SIZE;
 
-/// Internal node body layout
-const CHILD_PTR_SIZE: usize = PTR_SIZE;
+/// On a 64 bit machine the maximum space to keep all of the pointer
+/// is 200 * 8 = 1600 bytes.
+const MAX_SPACE_FOR_CHILDREN: usize = MAX_BRANCHING_FACTOR * PTR_SIZE;
 
-#[derive(PartialEq, Copy)]
+/// This leaves the keys of an internal node 2476 bytes:
+/// We use 2388 bytes for keys which leaves 88 bytes as junk.
+/// This means each key is limited to 12 bytes. (2476 / keys limit = ~12)  
+const MAX_SPACE_FOR_KEYS: usize = PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE - MAX_SPACE_FOR_CHILDREN;
+
+/// Key, Value sizes.
+const KEY_SIZE: usize = 12;
+const VALUE_SIZE: usize = 12;
+
+#[derive(PartialEq)]
 pub enum NodeType {
     Internal = 1,
     Leaf = 2,
     Unknown,
-}
-
-impl Clone for NodeType {
-    fn clone(&self) -> NodeType {
-        *self
-    }
 }
 
 // Casts a byte to a NodeType.
@@ -79,7 +83,7 @@ impl Node {
             offset,
             parent_pointer_offset,
             is_root,
-            page,
+            page: page,
         }
     }
 
@@ -89,27 +93,31 @@ impl Node {
         match self.node_type {
             NodeType::Leaf => {
                 let mut res = Vec::<KeyValuePair>::new();
-                let mut offset = COMMON_NODE_HEADER_SIZE;
+                let mut offset = LEAF_NODE_NUM_PAIRS_OFFSET;
                 let num_keys_val_pairs = self.page.get_value_from_offset(offset)?;
 
                 offset = LEAF_NODE_HEADER_SIZE;
 
                 for _i in 0..num_keys_val_pairs {
-                    let key_raw = self.page.get_ptr_from_offset(offset);
+                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
                     let key = match str::from_utf8(key_raw) {
                         Ok(key) => key,
                         Err(_) => return Err(Error::UTF8Error),
                     };
-                    // Increment offset after getting the key.
-                    offset = offset + PTR_SIZE + KEY_SIZE_FIELD;
-                    let value_raw = self.page.get_ptr_from_offset(offset);
+                    offset += KEY_SIZE;
+
+                    let value_raw = self.page.get_ptr_from_offset(offset, VALUE_SIZE);
                     let value = match str::from_utf8(value_raw) {
                         Ok(val) => val,
                         Err(_) => return Err(Error::UTF8Error),
                     };
-                    // Increment the offset after getting the value.
-                    offset = offset + PTR_SIZE + VALUE_SIZE_FIELD;
-                    res.push(KeyValuePair::new(key.to_string(), value.to_string()))
+                    offset += VALUE_SIZE;
+
+                    // Trim leading or trailing zeros.
+                    res.push(KeyValuePair::new(
+                        key.trim_matches(char::from(0)).to_string(),
+                        value.trim_matches(char::from(0)).to_string(),
+                    ))
                 }
                 return Ok(res);
             }
@@ -122,11 +130,13 @@ impl Node {
     pub fn get_children(&self) -> Result<Vec<&[u8]>, Error> {
         match self.node_type {
             NodeType::Internal => {
-                let num_children = self.page.get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
+                let num_children = self
+                    .page
+                    .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
                 let mut result = Vec::<&[u8]>::new();
-                let offset = INTERNAL_NODE_HEADER_SIZE;
+                let mut offset = INTERNAL_NODE_HEADER_SIZE;
                 for _i in 1..num_children {
-                    let child_raw = self.page.get_ptr_from_offset(offset);
+                    let child_raw = self.page.get_ptr_from_offset(offset, PTR_SIZE);
                     result.push(child_raw);
                     offset += PTR_SIZE;
                 }
@@ -150,53 +160,42 @@ impl Node {
         if node_type == NodeType::Unknown {
             return Err(Error::UnexpectedError);
         }
-        
+
         let page = Page::new(page);
         let parent_pointer_offset = offset + PARENT_POINTER_OFFSET;
 
-        return Ok(Node::new(node_type, offset, parent_pointer_offset, is_root, page));
-    }
-}
-
-impl Clone for Node {
-    fn clone(&self) -> Node {
-        Node {
-            is_root: self.is_root,
-            node_type: self.node_type,
-            offset: self.offset,
-            parent_pointer_offset: self.parent_pointer_offset,
-            page: self.page,
-        }
+        return Ok(Node::new(
+            node_type,
+            offset,
+            parent_pointer_offset,
+            is_root,
+            page,
+        ));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::error::Error;
-    use crate::node::{
-        Node, INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_SIZE,
-        INTERNAL_NODE_NUM_KEYS_SIZE, KEY_SIZE_FIELD, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET,
-        VALUE_SIZE_FIELD,
-    };
+    use crate::node::{Node, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET, VALUE_SIZE};
     use crate::page::PAGE_SIZE;
-    use std::convert::TryInto;
 
     #[test]
     fn page_to_node_works() -> Result<(), Error> {
-        const DATA_LEN: usize = LEAF_NODE_HEADER_SIZE + KEY_SIZE_FIELD + VALUE_SIZE_FIELD + 10;
+        const DATA_LEN: usize = LEAF_NODE_HEADER_SIZE + KEY_SIZE + VALUE_SIZE;
         let page_data: [u8; DATA_LEN] = [
             0x01, // Is-Root byte.
             0x02, // Node type byte.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // Number of Key-Value pairs.
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, // Key size.
-            0x68, 0x65, 0x6c, 0x6c, 0x6f, // "hello"
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, // Value size.
-            0x77, 0x6f, 0x72, 0x6c, 0x64, // "world"
+            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
+            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
         ];
         let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
-        let page = [0x00; PAGE_SIZE];
-        for (to, from) in page.iter_mut().zip(page_data.iter().chain(junk.iter())) { *to = *from };
+        let mut page = [0x00; PAGE_SIZE];
+        for (to, from) in page.iter_mut().zip(page_data.iter().chain(junk.iter())) {
+            *to = *from
+        }
 
         let offset = PAGE_SIZE * 2;
         let node = Node::page_to_node(offset, page)?;
@@ -210,20 +209,20 @@ mod tests {
 
     #[test]
     fn get_key_value_pairs_works() -> Result<(), Error> {
-        const DATA_LEN: usize = LEAF_NODE_HEADER_SIZE + KEY_SIZE_FIELD + VALUE_SIZE_FIELD + 10;
+        const DATA_LEN: usize = LEAF_NODE_HEADER_SIZE + KEY_SIZE + VALUE_SIZE;
         let page_data: [u8; DATA_LEN] = [
             0x01, // Is-Root byte.
             0x02, // Node type byte.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // Number of Key-Value pairs.
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, // Key size.
-            0x68, 0x65, 0x6c, 0x6c, 0x6f, // "hello"
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, // Value size.
-            0x77, 0x6f, 0x72, 0x6c, 0x64, // "world"
+            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
+            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
         ];
         let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
-        let page = [0x00; PAGE_SIZE];
-        for (to, from) in page.iter_mut().zip(page_data.iter().chain(junk.iter())) { *to = *from };
+        let mut page = [0x00; PAGE_SIZE];
+        for (to, from) in page.iter_mut().zip(page_data.iter().chain(junk.iter())) {
+            *to = *from
+        }
 
         let offset = PAGE_SIZE * 2;
         let node = Node::page_to_node(offset, page)?;
