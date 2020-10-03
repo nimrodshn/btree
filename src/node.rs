@@ -1,11 +1,9 @@
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
 use crate::page::{Page, PAGE_SIZE, PTR_SIZE};
+use crate::btree::{MAX_BRANCHING_FACTOR};
 use std::str;
 
-const MAX_BRANCHING_FACTOR: usize = 200;
-const MIN_BRANCHING_FACTOR: usize = 100;
-const INTERNAL_NODE_KEYS_LIMIT: usize = MAX_BRANCHING_FACTOR - 1;
 
 /// Common Node header layout (Ten bytes in total)
 const IS_ROOT_SIZE: usize = 1;
@@ -18,7 +16,8 @@ const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_PO
 
 /// Leaf node header layout (Eighteen bytes in total)
 ///
-// Space for keys and values: PAGE_SIZE - LEAF_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
+/// Space for keys and values: PAGE_SIZE - LEAF_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
+/// Which leaves 4076 / keys_limit = 20 (ten for key and 10 for value).
 const LEAF_NODE_NUM_PAIRS_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
 const LEAF_NODE_NUM_PAIRS_SIZE: usize = PTR_SIZE;
 const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_PAIRS_SIZE;
@@ -36,12 +35,13 @@ const MAX_SPACE_FOR_CHILDREN: usize = MAX_BRANCHING_FACTOR * PTR_SIZE;
 
 /// This leaves the keys of an internal node 2476 bytes:
 /// We use 2388 bytes for keys which leaves 88 bytes as junk.
-/// This means each key is limited to 12 bytes. (2476 / keys limit = ~12)  
+/// This means each key is limited to 12 bytes. (2476 / keys limit = ~12) 
+/// Rounded down to 10 to accomodate the leave node.
 const MAX_SPACE_FOR_KEYS: usize = PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE - MAX_SPACE_FOR_CHILDREN;
 
 /// Key, Value sizes.
-const KEY_SIZE: usize = 12;
-const VALUE_SIZE: usize = 12;
+const KEY_SIZE: usize = 10;
+const VALUE_SIZE: usize = 10;
 
 #[derive(PartialEq)]
 pub enum NodeType {
@@ -188,8 +188,8 @@ mod tests {
             0x02, // Node type byte.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // Number of Key-Value pairs.
-            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
-            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
+            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
+            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
         ];
         let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
         let mut page = [0x00; PAGE_SIZE];
@@ -215,8 +215,8 @@ mod tests {
             0x02, // Node type byte.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // Number of Key-Value pairs.
-            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
-            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
+            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
+            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
         ];
         let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
         let mut page = [0x00; PAGE_SIZE];
