@@ -1,9 +1,8 @@
+use crate::btree::MAX_BRANCHING_FACTOR;
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
 use crate::page::{Page, PAGE_SIZE, PTR_SIZE};
-use crate::btree::{MAX_BRANCHING_FACTOR};
 use std::str;
-
 
 /// Common Node header layout (Ten bytes in total)
 const IS_ROOT_SIZE: usize = 1;
@@ -35,7 +34,7 @@ const MAX_SPACE_FOR_CHILDREN: usize = MAX_BRANCHING_FACTOR * PTR_SIZE;
 
 /// This leaves the keys of an internal node 2476 bytes:
 /// We use 2388 bytes for keys which leaves 88 bytes as junk.
-/// This means each key is limited to 12 bytes. (2476 / keys limit = ~12) 
+/// This means each key is limited to 12 bytes. (2476 / keys limit = ~12)
 /// Rounded down to 10 to accomodate the leave node.
 const MAX_SPACE_FOR_KEYS: usize = PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE - MAX_SPACE_FOR_CHILDREN;
 
@@ -125,19 +124,19 @@ impl Node {
         };
     }
 
-    /// get_children returns the children of a certain node in case of an internal node,
+    /// get_children returns a *vector of offsets in the index file* to children of a certain node in case of an internal node,
     /// otherwise, returns an error.
-    pub fn get_children(&self) -> Result<Vec<&[u8]>, Error> {
+    pub fn get_children(&self) -> Result<Vec<usize>, Error> {
         match self.node_type {
             NodeType::Internal => {
                 let num_children = self
                     .page
                     .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
-                let mut result = Vec::<&[u8]>::new();
+                let mut result = Vec::<usize>::new();
                 let mut offset = INTERNAL_NODE_HEADER_SIZE;
-                for _i in 1..num_children {
-                    let child_raw = self.page.get_ptr_from_offset(offset, PTR_SIZE);
-                    result.push(child_raw);
+                for _i in 1..=num_children {
+                    let child_offset = self.page.get_value_from_offset(offset)?;
+                    result.push(child_offset);
                     offset += PTR_SIZE;
                 }
                 return Ok(result);
@@ -177,7 +176,10 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use crate::error::Error;
-    use crate::node::{Node, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET, VALUE_SIZE};
+    use crate::node::{
+        Node, INTERNAL_NODE_HEADER_SIZE,PTR_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET,
+        VALUE_SIZE,
+    };
     use crate::page::PAGE_SIZE;
 
     #[test]
@@ -237,6 +239,40 @@ mod tests {
         assert_eq!(first_kv.key, "hello");
         assert_eq!(first_kv.value, "world");
 
+        Ok(())
+    }
+
+    #[test]
+    fn get_children_works() -> Result<(), Error> {
+        const DATA_LEN: usize = INTERNAL_NODE_HEADER_SIZE + 3 * PTR_SIZE + 2 * KEY_SIZE;
+        let page_data: [u8; DATA_LEN] = [
+            0x01, // Is-Root byte.
+            0x01, // Node type byte.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, // Number of children.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, // 4096
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, // 8192
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, // 12288
+            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
+            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
+        ];
+        let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
+
+        // Concatenate the two arrays; page_data and junk.
+        let mut page = [0x00; PAGE_SIZE];
+        for (to, from) in page.iter_mut().zip(page_data.iter().chain(junk.iter())) {
+            *to = *from
+        }
+
+        let offset = 0;
+        let node = Node::page_to_node(offset, page)?;
+        let children = node.get_children()?;
+
+        assert_eq!(children.len(), 3);
+        for (i, child) in children.iter().enumerate() {
+            assert_eq!(*child, PAGE_SIZE * (i+1));
+        }
+        
         Ok(())
     }
 }
