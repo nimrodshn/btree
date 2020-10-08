@@ -1,9 +1,8 @@
 use crate::error::Error;
 use crate::page::PAGE_SIZE;
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
-use std::sync::Arc;
 
 // Root Node offset is always at zero.
 pub const ROOT_NODE_OFFSET: usize = 0;

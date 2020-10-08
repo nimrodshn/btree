@@ -1,6 +1,6 @@
 # btree
 
-A **persistent** B+Tree implementation, designed as an index for a key value store, inspired by (SQLite)[https://www.sqlite.org/index.html].
+A **persistent** B+Tree implementation, designed as an index for a key value store, inspired by [SQLite](https://www.sqlite.org/index.html).
 
 ## Design
 This project **only** supports a single index per BTree although multiple trees can be used as multiple indexes in a table.
@@ -35,6 +35,7 @@ Here is a simple example of an "internal" node:
    0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
    0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
 ```
+Note that the number of keys in an internal node is always one less than the number of child pointers.
 
 For more information about the on-disk data strcuture see the tests at `src/nodes.rs`.
 
