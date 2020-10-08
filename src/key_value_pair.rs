@@ -8,3 +8,12 @@ impl KeyValuePair {
         KeyValuePair { key, value }
     }
 }
+
+impl Clone for KeyValuePair {
+    fn clone(&self) -> KeyValuePair {
+        KeyValuePair {
+            key: self.key.clone(),
+            value: self.value.clone(),
+        }
+    }
+}

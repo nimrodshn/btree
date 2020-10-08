@@ -32,13 +32,14 @@ impl Page {
         Ok(res)
     }
 
+    /// Fetches a slice of bytes from certain offset and of certain size.
     pub fn get_ptr_from_offset(&self, offset: usize, size: usize) -> &[u8] {
         &self.data[offset..offset + size]
     }
 }
 
-// Attempts to convert a slice to an array of a fixed size (PTR_SIZE),
-// and then return the BigEndian value of the byte array.
+/// Attempts to convert a slice to an array of a fixed size (PTR_SIZE),
+/// and then return the BigEndian value of the byte array.
 impl TryFrom<&[u8]> for Value {
     type Error = Error;
 

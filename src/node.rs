@@ -145,8 +145,7 @@ impl Node {
         };
     }
 
-     /// get_children returns a *vector of offsets in the index file* to children of a certain node in case of an internal node,
-    /// otherwise, returns an error.
+    /// get_keys returns a A result which contains a vector with the keys contained in the node.
     pub fn get_keys(&self) -> Result<Vec<String>, Error> {
         match self.node_type {
             NodeType::Internal => {
@@ -154,7 +153,7 @@ impl Node {
                     .page
                     .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
                 let mut result = Vec::<String>::new();
-                let mut offset = INTERNAL_NODE_HEADER_SIZE + num_children*PTR_SIZE;
+                let mut offset = INTERNAL_NODE_HEADER_SIZE + num_children * PTR_SIZE;
                 // Number of keys is always one less than the number of children.
                 let num_keys = num_children - 1;
                 for _i in 1..=num_keys {
@@ -169,8 +168,41 @@ impl Node {
                 }
                 return Ok(result);
             }
-            _ => return Err(Error::UnexpectedError),
+            NodeType::Leaf => {
+                let mut res = Vec::<String>::new();
+                let mut offset = LEAF_NODE_NUM_PAIRS_OFFSET;
+                let num_keys_val_pairs = self.page.get_value_from_offset(offset)?;
+                offset = LEAF_NODE_HEADER_SIZE;
+                for _i in 1..=num_keys_val_pairs {
+                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+                    let key = match str::from_utf8(key_raw) {
+                        Ok(key) => key,
+                        Err(_) => return Err(Error::UTF8Error),
+                    };
+                    // Skip the values; keys and values are bunched up together.
+                    offset += KEY_SIZE + VALUE_SIZE;
+                    res.push(key.trim_matches(char::from(0)).to_string());
+                }
+                return Ok(res);
+            }
+            NodeType::Unknown => return Err(Error::UnexpectedError),
         };
+    }
+
+    /// get_keys returns a A result which contains a vector with the keys contained in the node.
+    pub fn find_key_value_pair(&self, key: String) -> Result<KeyValuePair, Error> {
+        match self.node_type {
+            NodeType::Leaf => {
+                let kv_pairs = self.get_key_value_pairs()?;
+                for kv_pair in kv_pairs {
+                    if kv_pair.key == key {
+                        return Ok(kv_pair);
+                    }
+                }
+                Err(Error::KeyNotFound)
+            }
+            _ => return Err(Error::KeyNotFound),
+        }
     }
 
     fn is_root(b: u8) -> bool {
@@ -205,8 +237,8 @@ impl Node {
 mod tests {
     use crate::error::Error;
     use crate::node::{
-        Node, INTERNAL_NODE_HEADER_SIZE,PTR_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET,
-        VALUE_SIZE,
+        Node, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET,
+        PTR_SIZE, VALUE_SIZE,
     };
     use crate::page::PAGE_SIZE;
 
@@ -298,14 +330,14 @@ mod tests {
 
         assert_eq!(children.len(), 3);
         for (i, child) in children.iter().enumerate() {
-            assert_eq!(*child, PAGE_SIZE * (i+1));
+            assert_eq!(*child, PAGE_SIZE * (i + 1));
         }
-        
+
         Ok(())
     }
 
     #[test]
-    fn get_keys_works() -> Result<(), Error> {
+    fn get_keys_work_for_internal_node() -> Result<(), Error> {
         const DATA_LEN: usize = INTERNAL_NODE_HEADER_SIZE + 3 * PTR_SIZE + 2 * KEY_SIZE;
         let page_data: [u8; DATA_LEN] = [
             0x01, // Is-Root byte.
@@ -342,6 +374,48 @@ mod tests {
             None => return Err(Error::UnexpectedError),
         };
         assert_eq!(second_key, "world");
+
+        Ok(())
+    }
+
+    #[test]
+    fn get_keys_work_for_leaf_node() -> Result<(), Error> {
+        const DATA_LEN: usize = INTERNAL_NODE_HEADER_SIZE + 2 * KEY_SIZE + 2 * VALUE_SIZE;
+        let page_data: [u8; DATA_LEN] = [
+            0x01, // Is-Root byte.
+            0x02, // Node type byte.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, // Number of Key-Value pairs.
+            0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
+            0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
+            0x66, 0x6f, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "foo"
+            0x62, 0x61, 0x72, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "bar"
+        ];
+
+        let junk: [u8; PAGE_SIZE - DATA_LEN] = [0x00; PAGE_SIZE - DATA_LEN];
+
+        // Concatenate the two arrays; page_data and junk.
+        let mut page = [0x00; PAGE_SIZE];
+        for (to, from) in page.iter_mut().zip(page_data.iter().chain(junk.iter())) {
+            *to = *from
+        }
+
+        let offset = 0;
+        let node = Node::page_to_node(offset, page)?;
+        let keys = node.get_keys()?;
+        assert_eq!(keys.len(), 2);
+
+        let first_key = match keys.get(0) {
+            Some(key) => key,
+            None => return Err(Error::UnexpectedError),
+        };
+        assert_eq!(first_key, "hello");
+
+        let second_key = match keys.get(1) {
+            Some(key) => key,
+            None => return Err(Error::UnexpectedError),
+        };
+        assert_eq!(second_key, "foo");
 
         Ok(())
     }
