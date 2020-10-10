@@ -1,6 +1,7 @@
 use crate::error::Error;
-use crate::page::PAGE_SIZE;
+use crate::page::{Page, PAGE_SIZE};
 use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -27,5 +28,11 @@ impl Pager {
         self.file.seek(SeekFrom::Start(offset as u64))?;
         self.file.read_exact(&mut page)?;
         Ok(page)
+    }
+
+    pub fn write_page(&mut self, page: &Page, offset: &usize) -> Result<(), Error> {
+        self.file.seek(SeekFrom::Start(*offset as u64))?;
+        self.file.write_all(&page.get_data())?;
+        Ok(())
     }
 }

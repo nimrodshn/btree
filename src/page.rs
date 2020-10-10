@@ -24,6 +24,15 @@ impl Page {
         }
     }
 
+    pub fn write_value_at_offset(&mut self, offset: usize, value: usize) -> Result<(), Error> {
+        if offset > PAGE_SIZE - PTR_SIZE {
+            return Err(Error::UnexpectedError);
+        }
+        let bytes = value.to_be_bytes();
+        self.data[offset..offset + PTR_SIZE].clone_from_slice(&bytes);
+        Ok(())
+    }
+
     /// Fetches a value calculated as BigEndian, sized to usize.
     /// This function may error as the value might not fit into a usize.
     pub fn get_value_from_offset(&self, offset: usize) -> Result<usize, Error> {
@@ -32,16 +41,30 @@ impl Page {
         Ok(res)
     }
 
+    pub fn write_bytes_at_offset(
+        &mut self,
+        bytes: &[u8],
+        offset: usize,
+        size: usize,
+    ) -> Result<(), Error> {
+        self.data[offset..offset + size].clone_from_slice(&bytes);
+        Ok(())
+    }
+
     /// Fetches a slice of bytes from certain offset and of certain size.
     pub fn get_ptr_from_offset(&self, offset: usize, size: usize) -> &[u8] {
         &self.data[offset..offset + size]
+    }
+
+    pub fn get_data(&self) -> [u8; PAGE_SIZE] {
+        *self.data
     }
 }
 
 impl Clone for Page {
     fn clone(&self) -> Page {
         Page {
-            data: self.data.clone()
+            data: self.data.clone(),
         }
     }
 }

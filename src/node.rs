@@ -81,7 +81,7 @@ pub struct Node {
 
 impl Clone for Node {
     fn clone(&self) -> Node {
-        Node{
+        Node {
             node_type: self.node_type.clone(),
             offset: self.offset.clone(),
             parent_pointer_offset: self.parent_pointer_offset.clone(),
@@ -209,6 +209,44 @@ impl Node {
             }
             NodeType::Unknown => return Err(Error::UnexpectedError),
         };
+    }
+
+    pub fn add_key_value_pair(&mut self, kv: KeyValuePair) -> Result<(), Error> {
+        match self.node_type {
+            NodeType::Leaf => {
+                let num_keys_val_pairs = self
+                    .page
+                    .get_value_from_offset(LEAF_NODE_NUM_PAIRS_OFFSET)?;
+                let offset = LEAF_NODE_HEADER_SIZE + (KEY_SIZE + VALUE_SIZE) * num_keys_val_pairs;
+                // Update number of key value pairs.
+                self.page
+                    .write_value_at_offset(LEAF_NODE_NUM_PAIRS_OFFSET, num_keys_val_pairs + 1)?;
+                // Write the key.
+                let key_raw = kv.key.as_bytes();
+                self.page.write_bytes_at_offset(key_raw, offset, KEY_SIZE)?;
+                // Write the value.
+                let value_raw = kv.value.as_bytes();
+                self.page
+                    .write_bytes_at_offset(value_raw, offset + KEY_SIZE, VALUE_SIZE)?;
+                Ok(())
+            }
+            _ => return Err(Error::UnexpectedError),
+        }
+    }
+
+    /// get_keys_len retrieves the number of keys in the node.
+    pub fn get_keys_len(&self) -> Result<usize, Error> {
+        match self.node_type {
+            NodeType::Internal => {
+                let num_children = self
+                    .page
+                    .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
+                let num_keys = num_children - 1;
+                Ok(num_keys)
+            }
+            NodeType::Leaf => self.page.get_value_from_offset(LEAF_NODE_NUM_PAIRS_OFFSET),
+            NodeType::Unknown => Err(Error::UnexpectedError),
+        }
     }
 
     /// get_keys returns a A result which contains a vector with the keys contained in the node.
