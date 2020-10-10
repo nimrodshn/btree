@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum Error {
     KeyNotFound,
+    KeyAlreadyExists,
     UnexpectedError,
     TryFromSliceError(&'static str),
     UTF8Error,

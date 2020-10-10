@@ -60,6 +60,16 @@ impl From<u8> for NodeType {
     }
 }
 
+impl Clone for NodeType {
+    fn clone(&self) -> NodeType {
+        match *self {
+            NodeType::Internal => NodeType::Internal,
+            NodeType::Leaf => NodeType::Leaf,
+            NodeType::Unknown => NodeType::Unknown,
+        }
+    }
+}
+
 /// Node represents a node in the BTree occupied by a single page in memory.
 pub struct Node {
     pub node_type: NodeType,
@@ -67,6 +77,18 @@ pub struct Node {
     pub parent_pointer_offset: usize,
     pub is_root: bool,
     pub page: Page,
+}
+
+impl Clone for Node {
+    fn clone(&self) -> Node {
+        Node{
+            node_type: self.node_type.clone(),
+            offset: self.offset.clone(),
+            parent_pointer_offset: self.parent_pointer_offset.clone(),
+            is_root: self.is_root.clone(),
+            page: self.page.clone(),
+        }
+    }
 }
 
 impl Node {

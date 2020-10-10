@@ -38,6 +38,14 @@ impl Page {
     }
 }
 
+impl Clone for Page {
+    fn clone(&self) -> Page {
+        Page {
+            data: self.data.clone()
+        }
+    }
+}
+
 /// Attempts to convert a slice to an array of a fixed size (PTR_SIZE),
 /// and then return the BigEndian value of the byte array.
 impl TryFrom<&[u8]> for Value {
