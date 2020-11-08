@@ -5,9 +5,6 @@ use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-// Root Node offset is always at zero.
-pub const ROOT_NODE_OFFSET: usize = 0;
-
 pub struct Pager {
     file: File,
 }

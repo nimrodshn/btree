@@ -2,6 +2,7 @@ use crate::btree::MAX_BRANCHING_FACTOR;
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
 use crate::page::{Page, PAGE_SIZE, PTR_SIZE};
+use std::convert::TryFrom;
 use std::str;
 
 /// Common Node header layout (Ten bytes in total)
@@ -60,49 +61,28 @@ impl From<u8> for NodeType {
     }
 }
 
-impl Clone for NodeType {
-    fn clone(&self) -> NodeType {
-        match *self {
-            NodeType::Internal => NodeType::Internal,
-            NodeType::Leaf => NodeType::Leaf,
-            NodeType::Unknown => NodeType::Unknown,
-        }
-    }
-}
-
 /// Node represents a node in the BTree occupied by a single page in memory.
 pub struct Node {
     pub node_type: NodeType,
-    pub offset: usize,
-    pub parent_pointer_offset: usize,
+    pub parent_offset: usize,
     pub is_root: bool,
+    pub offset: usize,
     pub page: Page,
 }
 
-impl Clone for Node {
-    fn clone(&self) -> Node {
-        Node {
-            node_type: self.node_type.clone(),
-            offset: self.offset.clone(),
-            parent_pointer_offset: self.parent_pointer_offset.clone(),
-            is_root: self.is_root.clone(),
-            page: self.page.clone(),
-        }
-    }
-}
-
+// Node represents a node in the B-Tree.
 impl Node {
     pub fn new(
         node_type: NodeType,
+        parent_offset: usize,
         offset: usize,
-        parent_pointer_offset: usize,
         is_root: bool,
         page: Page,
     ) -> Node {
         Node {
             node_type,
+            parent_offset,
             offset,
-            parent_pointer_offset,
             is_root,
             page: page,
         }
@@ -211,6 +191,8 @@ impl Node {
         };
     }
 
+    /// add_key_value_pair adds a key value pair to self,
+    /// Intended for Leaf nodes only.
     pub fn add_key_value_pair(&mut self, kv: KeyValuePair) -> Result<(), Error> {
         match self.node_type {
             NodeType::Leaf => {
@@ -232,6 +214,45 @@ impl Node {
             }
             _ => return Err(Error::UnexpectedError),
         }
+    }
+
+    /// add key adds a key to self,
+    /// Intended for Internal nodes only.
+    pub fn add_key(&mut self, key: String) -> Result<(), Error> {
+        match self.node_type {
+            NodeType::Internal => {
+                let num_children = self
+                    .page
+                    .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
+                let mut offset = INTERNAL_NODE_HEADER_SIZE + (PTR_SIZE) * num_children;
+                // Update number of children. (eq number of keys + 1)
+                self.page
+                    .write_value_at_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET, num_children + 1)?;
+                // Find placement for new key.
+                let num_keys = num_children - 1;
+                let end_key_data = num_keys * KEY_SIZE;
+                for _ in 1..=num_keys {
+                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+                    let iter_key = match str::from_utf8(key_raw) {
+                        Ok(key) => key,
+                        Err(_) => return Err(Error::UTF8Error),
+                    };
+                    if iter_key.to_owned() >= key {
+                        // Found the index to insert keys.
+                        self.page.insert_bytes_at_offset(
+                            key.as_bytes(),
+                            offset,
+                            end_key_data,
+                            KEY_SIZE,
+                        )?;
+                        break;
+                    }
+                    offset += KEY_SIZE;
+                }
+            }
+            _ => return Err(Error::UnexpectedError),
+        }
+        Ok(())
     }
 
     /// get_keys_len retrieves the number of keys in the node.
@@ -265,28 +286,81 @@ impl Node {
         }
     }
 
-    fn is_root(b: u8) -> bool {
-        match b {
-            0x01 => true,
-            _ => false,
+    /// splits the current node returning the median key and the two split nodes.
+    pub fn split(&self) -> Result<(String, Node, Node), Error> {
+        match self.node_type {
+            NodeType::Internal => {
+                let num_children = self
+                    .page
+                    .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
+                let mut offset = INTERNAL_NODE_HEADER_SIZE + (PTR_SIZE) * num_children;
+
+                let split_node_num_key = (num_children - 1) / 2;
+                let mut left_node_keys = Vec::<&[u8]>::new();
+                let mut right_node_keys = Vec::<&[u8]>::new();
+
+                for _ in 1..split_node_num_key {
+                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+                    left_node_keys.push(key_raw);
+                    offset += KEY_SIZE;
+                }
+
+                let median_key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+                let median_key = match str::from_utf8(median_key_raw) {
+                    Ok(key) => key,
+                    Err(_) => return Err(Error::UTF8Error),
+                };
+
+                offset += KEY_SIZE;
+                for _ in 1..split_node_num_key {
+                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+                    right_node_keys.push(key_raw);
+                    offset += KEY_SIZE;
+                }
+
+                // TODO: create the left and right nodes here. append them to the index file.
+                // let left_node = Node::new(node_type: NodeType::Internal,
+                //     offset: usize,
+                //     parent_offset: usize,
+                //     is_root: bool,
+                //     page: Page)
+                //Ok((String::from(median_key), ,))
+
+                Err(Error::UnexpectedError)
+            }
+            NodeType::Leaf => Err(Error::UnexpectedError),
+            NodeType::Unknown => Err(Error::UnexpectedError),
         }
     }
+}
 
-    // page_to_node converts a raw page of memory to an in-memory node.
-    pub fn page_to_node(offset: usize, page: [u8; PAGE_SIZE]) -> Result<Node, Error> {
-        let is_root = Node::is_root(page[IS_ROOT_OFFSET]);
-        let node_type = NodeType::from(page[NODE_TYPE_OFFSET]);
+// NodeSpec is used to generate a Node by implementing TryFrom for thise type.
+// It contains the raw information used to populate the nodes fields.
+pub struct NodeSpec {
+    pub page_data: [u8; PAGE_SIZE],
+    pub offset: usize,
+}
+
+impl TryFrom<NodeSpec> for Node {
+    type Error = Error;
+    fn try_from(spec: NodeSpec) -> Result<Self, Self::Error> {
+        let page = Page::new(spec.page_data);
+        let is_root = match spec.page_data[IS_ROOT_OFFSET] {
+            0x01 => true,
+            _ => false,
+        };
+
+        let node_type = NodeType::from(spec.page_data[NODE_TYPE_OFFSET]);
         if node_type == NodeType::Unknown {
             return Err(Error::UnexpectedError);
         }
 
-        let page = Page::new(page);
-        let parent_pointer_offset = offset + PARENT_POINTER_OFFSET;
+        let parent_pointer_offset = page.get_value_from_offset(PARENT_POINTER_OFFSET)?;
 
         return Ok(Node::new(
             node_type,
-            offset,
             parent_pointer_offset,
+            spec.offset,
             is_root,
             page,
         ));
@@ -297,10 +371,11 @@ impl Node {
 mod tests {
     use crate::error::Error;
     use crate::node::{
-        Node, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PARENT_POINTER_OFFSET,
-        PTR_SIZE, VALUE_SIZE,
+        Node, NodeSpec, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PTR_SIZE,
+        VALUE_SIZE,
     };
     use crate::page::PAGE_SIZE;
+    use std::convert::TryFrom;
 
     #[test]
     fn page_to_node_works() -> Result<(), Error> {
@@ -320,11 +395,13 @@ mod tests {
         }
 
         let offset = PAGE_SIZE * 2;
-        let node = Node::page_to_node(offset, page)?;
+        let node = Node::try_from(NodeSpec {
+            offset: offset,
+            page_data: page,
+        })?;
 
         assert_eq!(node.is_root, true);
-        assert_eq!(node.offset, offset);
-        assert_eq!(node.parent_pointer_offset, offset + PARENT_POINTER_OFFSET);
+        assert_eq!(node.parent_offset, 0);
 
         Ok(())
     }
@@ -347,7 +424,10 @@ mod tests {
         }
 
         let offset = PAGE_SIZE * 2;
-        let node = Node::page_to_node(offset, page)?;
+        let node = Node::try_from(NodeSpec {
+            offset: offset,
+            page_data: page,
+        })?;
         let kv = node.get_key_value_pairs()?;
 
         assert_eq!(kv.len(), 1);
@@ -385,7 +465,10 @@ mod tests {
         }
 
         let offset = 0;
-        let node = Node::page_to_node(offset, page)?;
+        let node = Node::try_from(NodeSpec {
+            offset: offset,
+            page_data: page,
+        })?;
         let children = node.get_children()?;
 
         assert_eq!(children.len(), 3);
@@ -419,7 +502,10 @@ mod tests {
         }
 
         let offset = 0;
-        let node = Node::page_to_node(offset, page)?;
+        let node = Node::try_from(NodeSpec {
+            offset: offset,
+            page_data: page,
+        })?;
         let keys = node.get_keys()?;
         assert_eq!(keys.len(), 2);
 
@@ -461,7 +547,11 @@ mod tests {
         }
 
         let offset = 0;
-        let node = Node::page_to_node(offset, page)?;
+        let node = Node::try_from(NodeSpec {
+            offset: offset,
+            page_data: page,
+        })?;
+
         let keys = node.get_keys()?;
         assert_eq!(keys.len(), 2);
 

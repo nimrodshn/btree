@@ -1,7 +1,8 @@
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::node::{Node, NodeType};
+use crate::node::{Node, NodeSpec, NodeType};
 use crate::pager::Pager;
+use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
 
 /// B+Tree properties.
@@ -25,7 +26,7 @@ impl BTree {
     }
 
     /// search searches for a specific key in the BTree.
-    fn search(&mut self, key: String) -> Result<KeyValuePair, Error> {
+    pub fn search(&mut self, key: String) -> Result<KeyValuePair, Error> {
         let (_, kv) = self.search_node(Arc::clone(&self.root), &key)?;
         match kv {
             Some(kv) => return Ok(kv),
@@ -34,7 +35,7 @@ impl BTree {
     }
 
     /// insert a key value pair possibly splitting nodes along the way.
-    fn insert(&mut self, kv: KeyValuePair) -> Result<(), Error> {
+    pub fn insert(&mut self, kv: KeyValuePair) -> Result<(), Error> {
         let (node, kv_pair_exists) = self.search_node(Arc::clone(&self.root), &kv.key)?;
         match kv_pair_exists {
             // Key already exists in the tree.
@@ -43,23 +44,27 @@ impl BTree {
         };
         // add key to node here possibly splitting nodes along the way.
         let mut guarded_node = match node.write() {
-                Err(_) => return Err(Error::UnexpectedError),
-                Ok(node) => node,
+            Err(_) => return Err(Error::UnexpectedError),
+            Ok(node) => node,
         };
         let keys_len = guarded_node.get_keys_len()?;
         if keys_len < NODE_KEYS_LIMIT {
+            // Add the new key value pair to the in-memory struct.
             guarded_node.add_key_value_pair(kv)?;
-            return self.pager.write_page(&guarded_node.page, &guarded_node.offset);
+            // Write the corresponding page to file.
+            return self
+                .pager
+                .write_page(&guarded_node.page, &guarded_node.offset);
         }
-        // split pages here.
+        self.split_node(Arc::clone(&node))?;
         Ok(())
     }
 
     /// search_node recursively searches a sub tree rooted at node for a key
     /// using a Pager to request pages as it traverses the subtree.
-    /// if we have traveresed all the way to the leaves the method
+    /// if we have traveresed all the way to the leaves and the key was not found the method
     /// returns the leaf node and None indicating the key was not found,
-    /// otherwise, continue recursively or return the appropriate error.
+    /// otherwise, continues recursively or return the appropriate error.
     fn search_node(
         &mut self,
         node: Arc<RwLock<Node>>,
@@ -104,13 +109,44 @@ impl BTree {
                     None => return Err(Error::UnexpectedError),
                     Some(child_offset) => child_offset,
                 };
-                let child_node = Node::page_to_node(*child_offset, self.pager.get_page(*child_offset)?)?;
+                let child_node = Node::try_from(NodeSpec {
+                    offset: *child_offset,
+                    page_data: self.pager.get_page(*child_offset)?,
+                })?;
                 return self.search_node(Arc::new(RwLock::new(child_node)), search_key);
             }
             NodeType::Unknown => return Err(Error::UnexpectedError),
         };
     }
+
+    fn split_node(&mut self, node: Arc<RwLock<Node>>) -> Result<(), Error> {
+        let guarded_node = match node.write() {
+            Err(_) => return Err(Error::UnexpectedError),
+            Ok(node) => node,
+        };
+        let keys = guarded_node.get_keys()?;
+        let mut parent_node = Node::try_from(NodeSpec {
+            offset: guarded_node.parent_offset,
+            page_data: self.pager.get_page(guarded_node.parent_offset)?,
+        })?;
+        let median_key = &keys[keys.len() / 2];
+        parent_node.add_key(median_key.to_string())
+    }
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use crate::error::Error;
+
+    #[test]
+    fn search_works() -> Result<(), Error> {
+        // TOOD: write this.
+        Ok(())
+    }
+
+    #[test]
+    fn insert_works() -> Result<(), Error> {
+        // TOOD: write this.
+        Ok(())
+    }
+}

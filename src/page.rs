@@ -24,6 +24,8 @@ impl Page {
         }
     }
 
+    /// write_value_at_offset writes a given value (as BigEndian) at a certain offset
+    /// overriding values at that offset.
     pub fn write_value_at_offset(&mut self, offset: usize, value: usize) -> Result<(), Error> {
         if offset > PAGE_SIZE - PTR_SIZE {
             return Err(Error::UnexpectedError);
@@ -33,7 +35,7 @@ impl Page {
         Ok(())
     }
 
-    /// Fetches a value calculated as BigEndian, sized to usize.
+    /// get_value_from_offset Fetches a value calculated as BigEndian, sized to usize.
     /// This function may error as the value might not fit into a usize.
     pub fn get_value_from_offset(&self, offset: usize) -> Result<usize, Error> {
         let bytes = &self.data[offset..offset + PTR_SIZE];
@@ -41,6 +43,27 @@ impl Page {
         Ok(res)
     }
 
+    /// insert_bytes_at_offset pushes #size bytes from offset to end_offset
+    /// inserts #size bytes from given slice.
+    pub fn insert_bytes_at_offset(
+        &mut self,
+        bytes: &[u8],
+        offset: usize,
+        end_offset: usize,
+        size: usize,
+    ) -> Result<(), Error> {
+        // This Should not occur - better verify.
+        if end_offset + size > self.data.len() {
+            return Err(Error::UnexpectedError);
+        }
+        for idx in (offset..=end_offset).rev() {
+            self.data[idx + size] = self.data[idx]
+        }
+        self.data[offset..offset + size].clone_from_slice(&bytes);
+        Ok(())
+    }
+
+    /// write_bytes_at_offset write bytes at a certain offset overriding previous values.
     pub fn write_bytes_at_offset(
         &mut self,
         bytes: &[u8],
@@ -51,7 +74,7 @@ impl Page {
         Ok(())
     }
 
-    /// Fetches a slice of bytes from certain offset and of certain size.
+    /// get_ptr_from_offset Fetches a slice of bytes from certain offset and of certain size.
     pub fn get_ptr_from_offset(&self, offset: usize, size: usize) -> &[u8] {
         &self.data[offset..offset + size]
     }
