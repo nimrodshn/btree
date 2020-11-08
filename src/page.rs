@@ -79,16 +79,9 @@ impl Page {
         &self.data[offset..offset + size]
     }
 
+    /// get_data returns the underlying array.
     pub fn get_data(&self) -> [u8; PAGE_SIZE] {
         *self.data
-    }
-}
-
-impl Clone for Page {
-    fn clone(&self) -> Page {
-        Page {
-            data: self.data.clone(),
-        }
     }
 }
 

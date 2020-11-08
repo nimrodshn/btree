@@ -61,6 +61,33 @@ impl From<u8> for NodeType {
     }
 }
 
+/// Wrapper for converting byte to bool and back.
+trait FromByte {
+    fn from_byte(&self) -> bool;
+}
+
+trait ToByte {
+    fn to_byte(&self) -> u8;
+}
+
+impl FromByte for u8 {
+    fn from_byte(&self) -> bool {
+        match self {
+            0x01 => return true,
+            _ => return false,
+        };
+    }
+}
+
+impl ToByte for bool {
+    fn to_byte(&self) -> u8 {
+        return match self {
+            true => 0x01,
+            false => 0x00,
+        };
+    }
+}
+
 /// Node represents a node in the BTree occupied by a single page in memory.
 pub struct Node {
     pub node_type: NodeType,
@@ -334,8 +361,19 @@ impl Node {
     }
 }
 
-// NodeSpec is used to generate a Node by implementing TryFrom for thise type.
-// It contains the raw information used to populate the nodes fields.
+impl TryFrom<Node> for [u8; PAGE_SIZE] {
+    type Error = Error;
+
+    fn try_from(node: Node) -> Result<Self, Self::Error> {
+        let mut result: [u8; PAGE_SIZE] = [0x00; PAGE_SIZE];
+
+        result[IS_ROOT_OFFSET] = node.is_root.to_byte();
+
+        Ok(result)
+    }
+}
+
+// NodeSpec is a wrapper used to convert a page of bytes into a Node struct by implementing TryFrom.
 pub struct NodeSpec {
     pub page_data: [u8; PAGE_SIZE],
     pub offset: usize,
@@ -345,16 +383,11 @@ impl TryFrom<NodeSpec> for Node {
     type Error = Error;
     fn try_from(spec: NodeSpec) -> Result<Self, Self::Error> {
         let page = Page::new(spec.page_data);
-        let is_root = match spec.page_data[IS_ROOT_OFFSET] {
-            0x01 => true,
-            _ => false,
-        };
-
+        let is_root = spec.page_data[IS_ROOT_OFFSET].from_byte();
         let node_type = NodeType::from(spec.page_data[NODE_TYPE_OFFSET]);
         if node_type == NodeType::Unknown {
             return Err(Error::UnexpectedError);
         }
-
         let parent_pointer_offset = page.get_value_from_offset(PARENT_POINTER_OFFSET)?;
 
         return Ok(Node::new(
