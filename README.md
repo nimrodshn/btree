@@ -1,4 +1,3 @@
-![](img/btree.jpg)
 # btree
 
 **IMPORTANT** 
