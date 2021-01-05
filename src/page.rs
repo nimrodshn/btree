@@ -9,7 +9,7 @@ pub const PAGE_SIZE: usize = 4096;
 pub const PTR_SIZE: usize = size_of::<usize>();
 
 /// Value is a wrapper for a value in the page.
-pub struct Value(usize);
+pub struct Value(pub usize);
 
 /// Page is a wrapper for a single page of memory
 /// providing some helpful helpers for quick access.

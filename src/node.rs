@@ -1,7 +1,7 @@
 use crate::btree::MAX_BRANCHING_FACTOR;
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::page::{Page, PAGE_SIZE, PTR_SIZE};
+use crate::page::{Page, Value, PAGE_SIZE, PTR_SIZE};
 use std::convert::TryFrom;
 use std::str;
 
@@ -50,7 +50,7 @@ pub enum NodeType {
     Unknown,
 }
 
-// Casts a byte to a NodeType.
+// Converts a byte to a NodeType.
 impl From<u8> for NodeType {
     fn from(orig: u8) -> Self {
         match orig {
@@ -61,7 +61,19 @@ impl From<u8> for NodeType {
     }
 }
 
-/// Wrapper for converting byte to bool and back.
+// Converts a NodeType to a byte.
+impl From<NodeType> for u8 {
+    fn from(orig: NodeType) -> Self {
+        match orig {
+            NodeType::Internal => 0x01,
+            NodeType::Leaf => 0x02,
+            NodeType::Unknown => 0x03,
+        }
+    }
+}
+
+/// Wrappers for converting byte to bool and back.
+/// The convention used throughout the index file is: one is true; otherwise - false.
 trait FromByte {
     fn from_byte(&self) -> bool;
 }
@@ -345,13 +357,7 @@ impl Node {
                     offset += KEY_SIZE;
                 }
 
-                // TODO: create the left and right nodes here. append them to the index file.
-                // let left_node = Node::new(node_type: NodeType::Internal,
-                //     offset: usize,
-                //     parent_offset: usize,
-                //     is_root: bool,
-                //     page: Page)
-                //Ok((String::from(median_key), ,))
+                
 
                 Err(Error::UnexpectedError)
             }
@@ -361,27 +367,16 @@ impl Node {
     }
 }
 
-impl TryFrom<Node> for [u8; PAGE_SIZE] {
-    type Error = Error;
 
-    fn try_from(node: Node) -> Result<Self, Self::Error> {
-        let mut result: [u8; PAGE_SIZE] = [0x00; PAGE_SIZE];
-
-        result[IS_ROOT_OFFSET] = node.is_root.to_byte();
-
-        Ok(result)
-    }
-}
-
-// NodeSpec is a wrapper used to convert a page of bytes into a Node struct by implementing TryFrom.
-pub struct NodeSpec {
+/// PageAndOffset is a wrapper used to convert a page sized array into a Node.
+pub struct PageAndOffset {
     pub page_data: [u8; PAGE_SIZE],
     pub offset: usize,
 }
 
-impl TryFrom<NodeSpec> for Node {
+impl TryFrom<PageAndOffset> for Node {
     type Error = Error;
-    fn try_from(spec: NodeSpec) -> Result<Self, Self::Error> {
+    fn try_from(spec: PageAndOffset) -> Result<Self, Self::Error> {
         let page = Page::new(spec.page_data);
         let is_root = spec.page_data[IS_ROOT_OFFSET].from_byte();
         let node_type = NodeType::from(spec.page_data[NODE_TYPE_OFFSET]);
@@ -400,11 +395,17 @@ impl TryFrom<NodeSpec> for Node {
     }
 }
 
+////////////////////
+///              ///
+///  Unit Tests. ///
+///              ///
+////////////////////
+
 #[cfg(test)]
 mod tests {
     use crate::error::Error;
     use crate::node::{
-        Node, NodeSpec, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PTR_SIZE,
+        Node, PageAndOffset, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PTR_SIZE,
         VALUE_SIZE,
     };
     use crate::page::PAGE_SIZE;
@@ -428,7 +429,7 @@ mod tests {
         }
 
         let offset = PAGE_SIZE * 2;
-        let node = Node::try_from(NodeSpec {
+        let node = Node::try_from(PageAndOffset {
             offset: offset,
             page_data: page,
         })?;
@@ -457,7 +458,7 @@ mod tests {
         }
 
         let offset = PAGE_SIZE * 2;
-        let node = Node::try_from(NodeSpec {
+        let node = Node::try_from(PageAndOffset {
             offset: offset,
             page_data: page,
         })?;
@@ -498,7 +499,7 @@ mod tests {
         }
 
         let offset = 0;
-        let node = Node::try_from(NodeSpec {
+        let node = Node::try_from(PageAndOffset {
             offset: offset,
             page_data: page,
         })?;
@@ -535,7 +536,7 @@ mod tests {
         }
 
         let offset = 0;
-        let node = Node::try_from(NodeSpec {
+        let node = Node::try_from(PageAndOffset {
             offset: offset,
             page_data: page,
         })?;
@@ -580,7 +581,7 @@ mod tests {
         }
 
         let offset = 0;
-        let node = Node::try_from(NodeSpec {
+        let node = Node::try_from(PageAndOffset {
             offset: offset,
             page_data: page,
         })?;

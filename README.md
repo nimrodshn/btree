@@ -1,5 +1,9 @@
 # btree
 
+**IMPORTANT** 
+
+This project is ongoing and considered work-in-progress - contributions are welcome :).
+
 A **persistent** B+Tree implementation, designed as an index for a key value store, inspired by [SQLite](https://www.sqlite.org/index.html).
 
 ## Design
