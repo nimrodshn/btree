@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::node::{Node, NodeSpec, NodeType};
+use crate::node::{Node, PageAndOffset, NodeType};
 use crate::pager::Pager;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
@@ -109,7 +109,7 @@ impl BTree {
                     None => return Err(Error::UnexpectedError),
                     Some(child_offset) => child_offset,
                 };
-                let child_node = Node::try_from(NodeSpec {
+                let child_node = Node::try_from(PageAndOffset {
                     offset: *child_offset,
                     page_data: self.pager.get_page(*child_offset)?,
                 })?;
@@ -125,7 +125,7 @@ impl BTree {
             Ok(node) => node,
         };
         let keys = guarded_node.get_keys()?;
-        let mut parent_node = Node::try_from(NodeSpec {
+        let mut parent_node = Node::try_from(PageAndOffset {
             offset: guarded_node.parent_offset,
             page_data: self.pager.get_page(guarded_node.parent_offset)?,
         })?;
