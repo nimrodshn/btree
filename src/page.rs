@@ -1,12 +1,6 @@
 use crate::error::Error;
+use crate::page_layout::{PAGE_SIZE, PTR_SIZE};
 use std::convert::TryFrom;
-use std::mem::size_of;
-
-/// A single page size.
-/// Each page represents a node in the BTree.
-pub const PAGE_SIZE: usize = 4096;
-
-pub const PTR_SIZE: usize = size_of::<usize>();
 
 /// Value is a wrapper for a value in the page.
 pub struct Value(pub usize);

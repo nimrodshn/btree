@@ -1,5 +1,6 @@
 use crate::error::Error;
-use crate::page::{Page, PAGE_SIZE};
+use crate::page::Page;
+use crate::page_layout::PAGE_SIZE;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};

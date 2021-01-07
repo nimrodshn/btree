@@ -1,6 +1,7 @@
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::node::{Node, PageAndOffset, NodeType};
+use crate::node::{Node, PageAndOffset};
+use crate::node_type::NodeType;
 use crate::pager::Pager;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};

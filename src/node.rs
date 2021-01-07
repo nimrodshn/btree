@@ -1,104 +1,14 @@
-use crate::btree::MAX_BRANCHING_FACTOR;
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::page::{Page, Value, PAGE_SIZE, PTR_SIZE};
+use crate::node_type::NodeType;
+use crate::page::Page;
+use crate::page_layout::{
+    INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_OFFSET, IS_ROOT_OFFSET, KEY_SIZE,
+    LEAF_NODE_HEADER_SIZE, LEAF_NODE_NUM_PAIRS_OFFSET, NODE_TYPE_OFFSET, PAGE_SIZE,
+    PARENT_POINTER_OFFSET, PTR_SIZE, VALUE_SIZE, FromByte,
+};
 use std::convert::TryFrom;
 use std::str;
-
-/// Common Node header layout (Ten bytes in total)
-const IS_ROOT_SIZE: usize = 1;
-const IS_ROOT_OFFSET: usize = 0;
-const NODE_TYPE_SIZE: usize = 1;
-const NODE_TYPE_OFFSET: usize = 1;
-const PARENT_POINTER_OFFSET: usize = 2;
-const PARENT_POINTER_SIZE: usize = PTR_SIZE;
-const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
-
-/// Leaf node header layout (Eighteen bytes in total)
-///
-/// Space for keys and values: PAGE_SIZE - LEAF_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
-/// Which leaves 4076 / keys_limit = 20 (ten for key and 10 for value).
-const LEAF_NODE_NUM_PAIRS_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
-const LEAF_NODE_NUM_PAIRS_SIZE: usize = PTR_SIZE;
-const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_PAIRS_SIZE;
-
-/// Internal header layout (Eighteen bytes in total)
-///
-// Space for children and keys: PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
-const INTERNAL_NODE_NUM_CHILDREN_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
-const INTERNAL_NODE_NUM_CHILDREN_SIZE: usize = PTR_SIZE;
-const INTERNAL_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_CHILDREN_SIZE;
-
-/// On a 64 bit machine the maximum space to keep all of the pointer
-/// is 200 * 8 = 1600 bytes.
-const MAX_SPACE_FOR_CHILDREN: usize = MAX_BRANCHING_FACTOR * PTR_SIZE;
-
-/// This leaves the keys of an internal node 2476 bytes:
-/// We use 2388 bytes for keys which leaves 88 bytes as junk.
-/// This means each key is limited to 12 bytes. (2476 / keys limit = ~12)
-/// Rounded down to 10 to accomodate the leave node.
-const MAX_SPACE_FOR_KEYS: usize = PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE - MAX_SPACE_FOR_CHILDREN;
-
-/// Key, Value sizes.
-const KEY_SIZE: usize = 10;
-const VALUE_SIZE: usize = 10;
-
-#[derive(PartialEq)]
-pub enum NodeType {
-    Internal = 1,
-    Leaf = 2,
-    Unknown,
-}
-
-// Converts a byte to a NodeType.
-impl From<u8> for NodeType {
-    fn from(orig: u8) -> Self {
-        match orig {
-            0x01 => return NodeType::Internal,
-            0x02 => return NodeType::Leaf,
-            _ => return NodeType::Unknown,
-        };
-    }
-}
-
-// Converts a NodeType to a byte.
-impl From<NodeType> for u8 {
-    fn from(orig: NodeType) -> Self {
-        match orig {
-            NodeType::Internal => 0x01,
-            NodeType::Leaf => 0x02,
-            NodeType::Unknown => 0x03,
-        }
-    }
-}
-
-/// Wrappers for converting byte to bool and back.
-/// The convention used throughout the index file is: one is true; otherwise - false.
-trait FromByte {
-    fn from_byte(&self) -> bool;
-}
-
-trait ToByte {
-    fn to_byte(&self) -> u8;
-}
-
-impl FromByte for u8 {
-    fn from_byte(&self) -> bool {
-        match self {
-            0x01 => return true,
-            _ => return false,
-        };
-    }
-}
-
-impl ToByte for bool {
-    fn to_byte(&self) -> u8 {
-        return match self {
-            true => 0x01,
-            false => 0x00,
-        };
-    }
-}
 
 /// Node represents a node in the BTree occupied by a single page in memory.
 pub struct Node {
@@ -186,7 +96,7 @@ impl Node {
         };
     }
 
-    /// get_keys returns a A result which contains a vector with the keys contained in the node.
+    /// get_keys returns a result which contains a vector with the keys contained in the node.
     pub fn get_keys(&self) -> Result<Vec<String>, Error> {
         match self.node_type {
             NodeType::Internal => {
@@ -357,7 +267,7 @@ impl Node {
                     offset += KEY_SIZE;
                 }
 
-                
+                // TODO: Return Ok(median, left_node, right_node) here.
 
                 Err(Error::UnexpectedError)
             }
@@ -366,7 +276,6 @@ impl Node {
         }
     }
 }
-
 
 /// PageAndOffset is a wrapper used to convert a page sized array into a Node.
 pub struct PageAndOffset {
@@ -408,7 +317,7 @@ mod tests {
         Node, PageAndOffset, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PTR_SIZE,
         VALUE_SIZE,
     };
-    use crate::page::PAGE_SIZE;
+    use crate::page_layout::PAGE_SIZE;
     use std::convert::TryFrom;
 
     #[test]

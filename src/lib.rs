@@ -2,5 +2,8 @@ pub mod btree;
 pub mod error;
 pub mod key_value_pair;
 pub mod node;
+pub mod node_type;
 pub mod page;
+pub mod page_builder;
+pub mod page_layout;
 pub mod pager;
