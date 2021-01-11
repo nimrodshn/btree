@@ -47,8 +47,6 @@ pub const MAX_SPACE_FOR_KEYS: usize =
 pub const KEY_SIZE: usize = 10;
 pub const VALUE_SIZE: usize = 10;
 
-
-
 /// Wrappers for converting byte to bool and back.
 /// The convention used throughout the index file is: one is true; otherwise - false.
 pub trait FromByte {

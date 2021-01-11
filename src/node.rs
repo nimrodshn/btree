@@ -2,12 +2,12 @@ use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
 use crate::node_type::NodeType;
 use crate::page::Page;
+use crate::page_builder::{InternalNodePageBuilder, PageBuilder};
 use crate::page_layout::{
-    INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_OFFSET, IS_ROOT_OFFSET, KEY_SIZE,
-    LEAF_NODE_HEADER_SIZE, LEAF_NODE_NUM_PAIRS_OFFSET, NODE_TYPE_OFFSET, PAGE_SIZE,
-    PARENT_POINTER_OFFSET, PTR_SIZE, VALUE_SIZE, FromByte,
+    FromByte, INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_OFFSET, IS_ROOT_OFFSET,
+    KEY_SIZE, LEAF_NODE_HEADER_SIZE, LEAF_NODE_NUM_PAIRS_OFFSET, NODE_TYPE_OFFSET, PAGE_SIZE,
+    PARENT_POINTER_OFFSET, PTR_SIZE, VALUE_SIZE,
 };
-use crate::page_builder::{InternalNodePageBuilder};
 use std::convert::TryFrom;
 use std::str;
 
@@ -237,6 +237,7 @@ impl Node {
     }
 
     /// splits the current node returning the median key and the two split nodes.
+    /// the two split nodes are *not* yet persisted to disk and need to be persisted by the caller.
     pub fn split(&self) -> Result<(String, Node, Node), Error> {
         match self.node_type {
             NodeType::Internal => {
@@ -253,7 +254,7 @@ impl Node {
                     let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
                     match str::from_utf8(key_raw) {
                         Ok(key) => left_node_keys.push(String::from(key)),
-                        Err(_) => return Err(Error::UTF8Error)
+                        Err(_) => return Err(Error::UTF8Error),
                     }
                     offset += KEY_SIZE;
                 }
@@ -268,27 +269,39 @@ impl Node {
                 for _ in 1..split_node_num_key {
                     let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
                     match str::from_utf8(key_raw) {
-                        Ok(key) => left_node_keys.push(String::from(key)),
-                        Err(_) => return Err(Error::UTF8Error)
+                        Ok(key) => right_node_keys.push(String::from(key)),
+                        Err(_) => return Err(Error::UTF8Error),
                     }
                     offset += KEY_SIZE;
                 }
 
-                let left_node_page_builder = InternalNodePageBuilder::default().
-                    is_root(false).node_type(self.node_type.clone()).
-                    parent_offset(self.parent_offset).
-                    keys(left_node_keys);
+                let mut left_node_page_builder = InternalNodePageBuilder::default();
+                left_node_page_builder
+                    .is_root(false)
+                    .node_type(self.node_type.clone())
+                    .parent_offset(self.parent_offset)
+                    .keys(left_node_keys);
                 let left_page = left_node_page_builder.build();
+                let left_node = Node::try_from(PageAndOffset {
+                    // Set offset to zero initially - this will be corrected by the pager once its persisted to disk.
+                    offset: 0,
+                    page_data: left_page.get_data(),
+                })?;
 
-                let right_node_page_builder = InternalNodePageBuilder::default().
-                    is_root(false).node_type(self.node_type.clone()).
-                    parent_offset(self.parent_offset).
-                    keys(left_node_keys);
+                let mut right_node_page_builder = InternalNodePageBuilder::default();
+                right_node_page_builder
+                    .is_root(false)
+                    .node_type(self.node_type.clone())
+                    .parent_offset(self.parent_offset)
+                    .keys(right_node_keys);
                 let right_page = right_node_page_builder.build();
+                let right_node = Node::try_from(PageAndOffset {
+                    // Set offset to zero initially - this will be corrected by the pager once its persisted to disk.
+                    offset: 0,
+                    page_data: right_page.get_data(),
+                })?;
 
-                // TODO: Return Ok(median, left_node, right_node) here.
-
-                Err(Error::UnexpectedError)
+                Ok((String::from(median_key), left_node, right_node))
             }
             NodeType::Leaf => Err(Error::UnexpectedError),
             NodeType::Unknown => Err(Error::UnexpectedError),

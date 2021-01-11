@@ -2,10 +2,10 @@ use crate::key_value_pair::KeyValuePair;
 use crate::node_type::NodeType;
 use crate::page::Page;
 use crate::page_layout::{
-    INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_OFFSET, INTERNAL_NODE_NUM_CHILDREN_SIZE,
-    IS_ROOT_OFFSET, KEY_SIZE, LEAF_NODE_HEADER_SIZE, LEAF_NODE_NUM_PAIRS_OFFSET,
-    LEAF_NODE_NUM_PAIRS_SIZE, NODE_TYPE_OFFSET, PAGE_SIZE, PARENT_POINTER_OFFSET,
-    PARENT_POINTER_SIZE, PTR_SIZE, VALUE_SIZE, ToByte,
+    ToByte, INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_OFFSET,
+    INTERNAL_NODE_NUM_CHILDREN_SIZE, IS_ROOT_OFFSET, KEY_SIZE, LEAF_NODE_HEADER_SIZE,
+    LEAF_NODE_NUM_PAIRS_OFFSET, LEAF_NODE_NUM_PAIRS_SIZE, NODE_TYPE_OFFSET, PAGE_SIZE,
+    PARENT_POINTER_OFFSET, PARENT_POINTER_SIZE, PTR_SIZE, VALUE_SIZE,
 };
 
 pub trait PageBuilder {
@@ -81,8 +81,8 @@ pub struct InternalNodePageBuilder {
 }
 
 impl Default for InternalNodePageBuilder {
-    fn default () -> InternalNodePageBuilder {
-        InternalNodePageBuilder{
+    fn default() -> InternalNodePageBuilder {
+        InternalNodePageBuilder {
             is_root: false,
             parent_offset: 0,
             node_type: NodeType::Unknown,
