@@ -1,7 +1,7 @@
 use std::convert::From;
 
 // NodeType Represents different node types in the BTree.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum NodeType {
     Internal = 1,
     Leaf = 2,

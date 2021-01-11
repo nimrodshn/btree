@@ -80,6 +80,18 @@ pub struct InternalNodePageBuilder {
     child_pointers: Vec<[u8; PTR_SIZE]>,
 }
 
+impl Default for InternalNodePageBuilder {
+    fn default () -> InternalNodePageBuilder {
+        InternalNodePageBuilder{
+            is_root: false,
+            parent_offset: 0,
+            node_type: NodeType::Unknown,
+            child_pointers: Vec::new(),
+            keys: Vec::new(),
+        }
+    }
+}
+
 impl InternalNodePageBuilder {
     pub fn is_root(&mut self, is_root: bool) -> &mut Self {
         self.is_root = is_root;
@@ -98,6 +110,11 @@ impl InternalNodePageBuilder {
 
     pub fn child_pointers(&mut self, child_pointers: Vec<[u8; PTR_SIZE]>) -> &mut Self {
         self.child_pointers = child_pointers;
+        self
+    }
+
+    pub fn keys(&mut self, keys: Vec<String>) -> &mut Self {
+        self.keys = keys;
         self
     }
 }
