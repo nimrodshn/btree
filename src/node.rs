@@ -240,72 +240,74 @@ impl Node {
     /// the two split nodes are *not* yet persisted to disk and need to be persisted by the caller.
     pub fn split(&self) -> Result<(String, Node, Node), Error> {
         match self.node_type {
-            NodeType::Internal => {
-                let num_children = self
-                    .page
-                    .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
-                let mut offset = INTERNAL_NODE_HEADER_SIZE + (PTR_SIZE) * num_children;
-
-                let split_node_num_key = (num_children - 1) / 2;
-                let mut left_node_keys = Vec::<String>::new();
-                let mut right_node_keys = Vec::<String>::new();
-
-                for _ in 1..split_node_num_key {
-                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
-                    match str::from_utf8(key_raw) {
-                        Ok(key) => left_node_keys.push(String::from(key)),
-                        Err(_) => return Err(Error::UTF8Error),
-                    }
-                    offset += KEY_SIZE;
-                }
-
-                let median_key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
-                let median_key = match str::from_utf8(median_key_raw) {
-                    Ok(key) => key,
-                    Err(_) => return Err(Error::UTF8Error),
-                };
-
-                offset += KEY_SIZE;
-                for _ in 1..split_node_num_key {
-                    let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
-                    match str::from_utf8(key_raw) {
-                        Ok(key) => right_node_keys.push(String::from(key)),
-                        Err(_) => return Err(Error::UTF8Error),
-                    }
-                    offset += KEY_SIZE;
-                }
-
-                let mut left_node_page_builder = InternalNodePageBuilder::default();
-                left_node_page_builder
-                    .is_root(false)
-                    .node_type(self.node_type.clone())
-                    .parent_offset(self.parent_offset)
-                    .keys(left_node_keys);
-                let left_page = left_node_page_builder.build();
-                let left_node = Node::try_from(PageAndOffset {
-                    // Set offset to zero initially - this will be corrected by the pager once its persisted to disk.
-                    offset: 0,
-                    page_data: left_page.get_data(),
-                })?;
-
-                let mut right_node_page_builder = InternalNodePageBuilder::default();
-                right_node_page_builder
-                    .is_root(false)
-                    .node_type(self.node_type.clone())
-                    .parent_offset(self.parent_offset)
-                    .keys(right_node_keys);
-                let right_page = right_node_page_builder.build();
-                let right_node = Node::try_from(PageAndOffset {
-                    // Set offset to zero initially - this will be corrected by the pager once its persisted to disk.
-                    offset: 0,
-                    page_data: right_page.get_data(),
-                })?;
-
-                Ok((String::from(median_key), left_node, right_node))
-            }
+            NodeType::Internal => self.split_internal_node(),
             NodeType::Leaf => Err(Error::UnexpectedError),
             NodeType::Unknown => Err(Error::UnexpectedError),
         }
+    }
+
+    fn split_internal_node(&self) -> Result<(String, Node, Node), Error> {
+        let num_children = self
+            .page
+            .get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
+        let mut offset = INTERNAL_NODE_HEADER_SIZE + (PTR_SIZE) * num_children;
+
+        let split_node_num_key = (num_children - 1) / 2;
+        let mut left_node_keys = Vec::<String>::new();
+        let mut right_node_keys = Vec::<String>::new();
+
+        for _ in 1..split_node_num_key {
+            let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+            match str::from_utf8(key_raw) {
+                Ok(key) => left_node_keys.push(String::from(key)),
+                Err(_) => return Err(Error::UTF8Error),
+            }
+            offset += KEY_SIZE;
+        }
+
+        let median_key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+        let median_key = match str::from_utf8(median_key_raw) {
+            Ok(key) => key,
+            Err(_) => return Err(Error::UTF8Error),
+        };
+
+        offset += KEY_SIZE;
+        for _ in 1..split_node_num_key {
+            let key_raw = self.page.get_ptr_from_offset(offset, KEY_SIZE);
+            match str::from_utf8(key_raw) {
+                Ok(key) => right_node_keys.push(String::from(key)),
+                Err(_) => return Err(Error::UTF8Error),
+            }
+            offset += KEY_SIZE;
+        }
+
+        let mut left_node_page_builder = InternalNodePageBuilder::default();
+        left_node_page_builder
+            .is_root(false)
+            .node_type(self.node_type.clone())
+            .parent_offset(self.parent_offset)
+            .keys(left_node_keys);
+        let left_page = left_node_page_builder.build();
+        let left_node = Node::try_from(PageAndOffset {
+            // Set offset to zero initially - this will be corrected by the pager once its persisted to disk.
+            offset: 0,
+            page_data: left_page.get_data(),
+        })?;
+
+        let mut right_node_page_builder = InternalNodePageBuilder::default();
+        right_node_page_builder
+            .is_root(false)
+            .node_type(self.node_type.clone())
+            .parent_offset(self.parent_offset)
+            .keys(right_node_keys);
+        let right_page = right_node_page_builder.build();
+        let right_node = Node::try_from(PageAndOffset {
+            // Set offset to zero initially - this will be corrected by the pager once its persisted to disk.
+            offset: 0,
+            page_data: right_page.get_data(),
+        })?;
+
+        Ok((String::from(median_key), left_node, right_node))
     }
 }
 
