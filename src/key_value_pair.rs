@@ -1,3 +1,4 @@
+#[derive(Eq, PartialEq)]
 pub struct KeyValuePair {
     pub key: String,
     pub value: String,

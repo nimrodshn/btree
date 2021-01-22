@@ -18,7 +18,7 @@ pub const COMMON_NODE_HEADER_SIZE: usize = NODE_TYPE_SIZE + IS_ROOT_SIZE + PAREN
 
 /// Leaf node header layout (Eighteen bytes in total)
 ///
-/// Space for keys and values: PAGE_SIZE - LEAF_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
+/// Space for keys and values: PAGE_SIZE - LEAF_NODE_HEADER_SIZE = 4096 - 18 = 4078 bytes.
 /// Which leaves 4076 / keys_limit = 20 (ten for key and 10 for value).
 pub const LEAF_NODE_NUM_PAIRS_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
 pub const LEAF_NODE_NUM_PAIRS_SIZE: usize = PTR_SIZE;
@@ -26,7 +26,7 @@ pub const LEAF_NODE_HEADER_SIZE: usize = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM
 
 /// Internal header layout (Eighteen bytes in total)
 ///
-// Space for children and keys: PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE = 4096 - 18 = 4076 bytes.
+// Space for children and keys: PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE = 4096 - 18 = 4078 bytes.
 pub const INTERNAL_NODE_NUM_CHILDREN_OFFSET: usize = COMMON_NODE_HEADER_SIZE;
 pub const INTERNAL_NODE_NUM_CHILDREN_SIZE: usize = PTR_SIZE;
 pub const INTERNAL_NODE_HEADER_SIZE: usize =
@@ -36,8 +36,8 @@ pub const INTERNAL_NODE_HEADER_SIZE: usize =
 /// is 200 * 8 = 1600 bytes.
 pub const MAX_SPACE_FOR_CHILDREN: usize = MAX_BRANCHING_FACTOR * PTR_SIZE;
 
-/// This leaves the keys of an internal node 2476 bytes:
-/// We use 2388 bytes for keys which leaves 88 bytes as junk.
+/// This leaves the keys of an internal node 2478 bytes:
+/// We use 1990 bytes for keys which leaves 488 bytes as junk.
 /// This means each key is limited to 12 bytes. (2476 / keys limit = ~12)
 /// Rounded down to 10 to accomodate the leave node.
 pub const MAX_SPACE_FOR_KEYS: usize =

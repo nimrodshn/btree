@@ -21,11 +21,11 @@ impl Pager {
         Ok(Pager { file: fd })
     }
 
-    pub fn get_page(&mut self, offset: usize) -> Result<[u8; PAGE_SIZE], Error> {
+    pub fn get_page(&mut self, offset: usize) -> Result<Page, Error> {
         let mut page: [u8; PAGE_SIZE] = [0x00; PAGE_SIZE];
         self.file.seek(SeekFrom::Start(offset as u64))?;
         self.file.read_exact(&mut page)?;
-        Ok(page)
+        Ok(Page::new(page))
     }
 
     pub fn write_page(&mut self, page: &Page, offset: &usize) -> Result<(), Error> {

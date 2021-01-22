@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::key_value_pair::KeyValuePair;
-use crate::node::{Node, PageAndOffset};
-use crate::node_type::NodeType;
+use crate::node::Node;
+use crate::node_type::{Key, NodeType, Offset};
 use crate::pager::Pager;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
@@ -26,39 +26,14 @@ impl BTree {
         }
     }
 
-    /// search searches for a specific key in the BTree.
-    pub fn search(&mut self, key: String) -> Result<KeyValuePair, Error> {
-        let (_, kv) = self.search_node(Arc::clone(&self.root), &key)?;
-        match kv {
-            Some(kv) => return Ok(kv),
-            None => return Err(Error::KeyNotFound),
-        }
-    }
-
     /// insert a key value pair possibly splitting nodes along the way.
     pub fn insert(&mut self, kv: KeyValuePair) -> Result<(), Error> {
-        let (node, kv_pair_exists) = self.search_node(Arc::clone(&self.root), &kv.key)?;
-        match kv_pair_exists {
-            // Key already exists in the tree.
-            Some(_) => return Err(Error::KeyAlreadyExists),
-            None => (),
-        };
-        // add key to node here possibly splitting nodes along the way.
-        let mut guarded_node = match node.write() {
-            Err(_) => return Err(Error::UnexpectedError),
-            Ok(node) => node,
-        };
-        let keys_len = guarded_node.get_keys_len()?;
-        if keys_len < NODE_KEYS_LIMIT {
-            // Add the new key value pair to the in-memory struct.
-            guarded_node.add_key_value_pair(kv)?;
-            // Write the corresponding page to file.
-            return self
-                .pager
-                .write_page(&guarded_node.page, &guarded_node.offset);
-        }
-        self.split_node(Arc::clone(&node))?;
         Ok(())
+    }
+
+    /// search searches for a specific key in the BTree.
+    pub fn search(&mut self, key: String) -> Result<KeyValuePair, Error> {
+        self.search_node(Arc::clone(&self.root), &key)
     }
 
     /// search_node recursively searches a sub tree rooted at node for a key
@@ -69,69 +44,38 @@ impl BTree {
     fn search_node(
         &mut self,
         node: Arc<RwLock<Node>>,
-        search_key: &String,
-    ) -> Result<(Arc<RwLock<Node>>, Option<KeyValuePair>), Error> {
+        search: &str,
+    ) -> Result<KeyValuePair, Error> {
         let guarded_node = match node.read() {
             Err(_) => return Err(Error::UnexpectedError),
             Ok(node) => node,
         };
-        let keys = guarded_node.get_keys()?;
-        for (i, key) in keys.iter().enumerate() {
-            // If this is the case were at a leaf node.
-            if *key == *search_key {
-                let kv_pairs = guarded_node.get_key_value_pairs()?;
-                match kv_pairs.get(i) {
-                    None => return Err(Error::UnexpectedError),
-                    Some(kv) => return Ok((Arc::clone(&node), Some(kv.clone()))),
-                };
+        match &guarded_node.node_type {
+            NodeType::Internal(children, keys) => {
+                for (i, Key(key)) in keys.iter().enumerate() {
+                    if search < key {
+                        let Offset(child_offset) = match children.get(i) {
+                            Some(offset) => offset,
+                            None => return Err(Error::UnexpectedError),
+                        };
+
+                        let page = self.pager.get_page(*child_offset)?;
+                        let child_node = Node::try_from(page)?;
+                        return self.search_node(Arc::new(RwLock::from(child_node)), search);
+                    }
+                }
+                Err(Error::KeyNotFound)
             }
-            if *key > *search_key {
-                return self.traverse_or_return(Arc::clone(&node), i, search_key);
+            NodeType::Leaf(pairs) => {
+                for kv_pair in pairs.iter() {
+                    if kv_pair.key.eq(search) {
+                        Some(kv_pair.clone());
+                    }
+                }
+                Err(Error::KeyNotFound)
             }
+            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
-        self.traverse_or_return(Arc::clone(&node), keys.len(), search_key)
-    }
-
-    fn traverse_or_return(
-        &mut self,
-        node: Arc<RwLock<Node>>,
-        index: usize,
-        search_key: &String,
-    ) -> Result<(Arc<RwLock<Node>>, Option<KeyValuePair>), Error> {
-        let guarded_node = match node.read() {
-            Err(_) => return Err(Error::UnexpectedError),
-            Ok(node) => node,
-        };
-        match guarded_node.node_type {
-            NodeType::Leaf => return Ok((Arc::clone(&node), None)),
-            NodeType::Internal => {
-                let children_ptrs = guarded_node.get_children()?;
-                let child_offset = match children_ptrs.get(index) {
-                    None => return Err(Error::UnexpectedError),
-                    Some(child_offset) => child_offset,
-                };
-                let child_node = Node::try_from(PageAndOffset {
-                    offset: *child_offset,
-                    page_data: self.pager.get_page(*child_offset)?,
-                })?;
-                return self.search_node(Arc::new(RwLock::new(child_node)), search_key);
-            }
-            NodeType::Unknown => return Err(Error::UnexpectedError),
-        };
-    }
-
-    fn split_node(&mut self, node: Arc<RwLock<Node>>) -> Result<(), Error> {
-        let guarded_node = match node.write() {
-            Err(_) => return Err(Error::UnexpectedError),
-            Ok(node) => node,
-        };
-        let keys = guarded_node.get_keys()?;
-        let mut parent_node = Node::try_from(PageAndOffset {
-            offset: guarded_node.parent_offset,
-            page_data: self.pager.get_page(guarded_node.parent_offset)?,
-        })?;
-        let median_key = &keys[keys.len() / 2];
-        parent_node.add_key(median_key.to_string())
     }
 }
 
@@ -141,7 +85,8 @@ mod tests {
 
     #[test]
     fn search_works() -> Result<(), Error> {
-        // TOOD: write this.
+        // use crate::btree::BTree;
+        // let btree = BTree::new();
         Ok(())
     }
 
