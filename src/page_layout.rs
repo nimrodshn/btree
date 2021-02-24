@@ -60,17 +60,17 @@ pub trait ToByte {
 impl FromByte for u8 {
     fn from_byte(&self) -> bool {
         match self {
-            0x01 => return true,
-            _ => return false,
-        };
+            0x01 => true,
+            _ => false,
+        }
     }
 }
 
 impl ToByte for bool {
     fn to_byte(&self) -> u8 {
-        return match self {
+        match self {
             true => 0x01,
             false => 0x00,
-        };
+        }
     }
 }

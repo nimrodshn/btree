@@ -1,36 +1,48 @@
 use crate::error::Error;
-use crate::key_value_pair::KeyValuePair;
-use crate::node_type::{Key, NodeType, Offset};
+use crate::node_type::{Key, KeyValuePair, NodeType, Offset};
 use crate::page::Page;
 use crate::page_layout::{
     FromByte, INTERNAL_NODE_HEADER_SIZE, INTERNAL_NODE_NUM_CHILDREN_OFFSET, IS_ROOT_OFFSET,
-    KEY_SIZE, LEAF_NODE_HEADER_SIZE, LEAF_NODE_NUM_PAIRS_OFFSET, NODE_TYPE_OFFSET, PTR_SIZE,
-    VALUE_SIZE,
+    KEY_SIZE, LEAF_NODE_HEADER_SIZE, LEAF_NODE_NUM_PAIRS_OFFSET, NODE_TYPE_OFFSET,
+    PARENT_POINTER_OFFSET, PTR_SIZE, VALUE_SIZE,
 };
 use std::convert::TryFrom;
 use std::str;
 
 /// Node represents a node in the BTree occupied by a single page in memory.
+#[derive(Clone)]
 pub struct Node {
     pub node_type: NodeType,
     pub is_root: bool,
+    pub parent_offset: Option<Offset>,
 }
 
 // Node represents a node in the B-Tree.
 impl Node {
-    pub fn new(node_type: NodeType, is_root: bool) -> Node {
-        Node { node_type, is_root }
+    pub fn new(node_type: NodeType, is_root: bool, parent_offset: Option<Offset>) -> Node {
+        Node {
+            node_type,
+            is_root,
+            parent_offset,
+        }
     }
 }
 
 /// Implement TryFrom<Page> for Node allowing for easier
-/// serialization of data from node object using the embedded fields in the NodeTypes variants.
+/// deserialization of data from a Page.
 impl TryFrom<Page> for Node {
     type Error = Error;
     fn try_from(page: Page) -> Result<Node, Error> {
         let raw = page.get_data();
         let node_type = NodeType::from(raw[NODE_TYPE_OFFSET]);
         let is_root = raw[IS_ROOT_OFFSET].from_byte();
+        let parent_offset: Option<Offset>;
+        if is_root {
+            parent_offset = None;
+        } else {
+            parent_offset = Some(Offset(page.get_value_from_offset(PARENT_POINTER_OFFSET)?));
+        }
+
         match node_type {
             NodeType::Internal(mut children, mut keys) => {
                 let num_children = page.get_value_from_offset(INTERNAL_NODE_NUM_CHILDREN_OFFSET)?;
@@ -41,6 +53,7 @@ impl TryFrom<Page> for Node {
                     offset += PTR_SIZE;
                 }
 
+                // Number of keys is always one less than the number of children (i.e. branching factor)
                 for _i in 1..num_children {
                     let key_raw = page.get_ptr_from_offset(offset, KEY_SIZE);
                     let key = match str::from_utf8(key_raw) {
@@ -51,7 +64,11 @@ impl TryFrom<Page> for Node {
                     // Trim leading or trailing zeros.
                     keys.push(Key(key.trim_matches(char::from(0)).to_string()));
                 }
-                Ok(Node::new(NodeType::Internal(children, keys), is_root))
+                Ok(Node::new(
+                    NodeType::Internal(children, keys),
+                    is_root,
+                    parent_offset,
+                ))
             }
 
             NodeType::Leaf(mut pairs) => {
@@ -80,7 +97,7 @@ impl TryFrom<Page> for Node {
                         value.trim_matches(char::from(0)).to_string(),
                     ))
                 }
-                Ok(Node::new(NodeType::Leaf(pairs), is_root))
+                Ok(Node::new(NodeType::Leaf(pairs), is_root, parent_offset))
             }
 
             NodeType::Unexpected => Err(Error::UnexpectedError),
