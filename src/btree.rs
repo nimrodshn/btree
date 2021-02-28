@@ -48,7 +48,6 @@ impl BTree {
         let root_page = self.pager.get_page(self.root_offset.clone())?;
         let root = Box::new(Node::try_from(root_page)?);
         let is_full = self.is_node_full(root.clone())?;
-        println!("node is full: {}", is_full);
         if is_full {
             let (child, child_offset) = self.allocate_new_root(root.clone())?;
             self.split_child(root.clone(), self.root_offset.clone(), child, child_offset)?;
@@ -182,18 +181,23 @@ impl BTree {
                 self.pager
                     .write_page_at_offset(Page::try_from(node)?, node_offset)
             }
-            NodeType::Internal(children, keys) => {
+            NodeType::Internal(ref children, ref keys) => {
                 let idx = keys
                     .binary_search(&Key(kv.key.clone()))
                     .unwrap_or_else(|x| x);
-                match children.get(idx) {
-                    Some(child_offset) => {
-                        let child_page = self.pager.get_page(child_offset.clone())?;
-                        let child = Node::try_from(child_page)?;
-                        self.insert_non_full(Box::new(child), child_offset.clone(), kv)
-                    }
-                    None => Err(Error::UnexpectedError),
+                let child_offset = children.get(idx).ok_or_else(|| Error::UnexpectedError)?;
+                let child_page = self.pager.get_page(child_offset.clone())?;
+                let child = Box::new(Node::try_from(child_page)?);
+                let is_full = self.is_node_full(child.clone())?;
+                if is_full {
+                    self.split_child(
+                        node.clone(),
+                        node_offset.clone(),
+                        child.clone(),
+                        child_offset.clone(),
+                    )?;
                 }
+                self.insert_non_full(child.clone(), child_offset.clone(), kv)
             }
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
@@ -248,13 +252,10 @@ mod tests {
         use crate::node_type::KeyValuePair;
         use std::path::Path;
 
-        // Sample b+tree with branching factor 3. (i.e. a 2-3-4 tree):
-        //     "a"
-        //       {"b":"hello"} {"c":"world"}
-        let mut btree = BTree::new(Path::new("/tmp/db"), 3)?;
-
+        let mut btree = BTree::new(Path::new("/tmp/db"), 2)?;
+        btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
-        btree.insert(KeyValuePair::new("c".to_string(), "world".to_string()))?;
+        btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
 
         let mut kv = btree.search("b".to_string())?;
         assert_eq!(kv.key, "b");
@@ -262,13 +263,29 @@ mod tests {
 
         kv = btree.search("c".to_string())?;
         assert_eq!(kv.key, "c");
-        assert_eq!(kv.value, "world");
+        assert_eq!(kv.value, "marhaba");
         Ok(())
     }
 
     #[test]
     fn insert_works() -> Result<(), Error> {
-        // TOOD: write this.
+        use crate::btree::BTree;
+        use crate::node_type::KeyValuePair;
+        use std::path::Path;
+
+        let mut btree = BTree::new(Path::new("/tmp/db"), 2)?;
+        btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
+        btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
+        btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
+        btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
+
+        let mut kv = btree.search("b".to_string())?;
+        assert_eq!(kv.key, "b");
+        assert_eq!(kv.value, "hello");
+
+        kv = btree.search("d".to_string())?;
+        assert_eq!(kv.key, "d");
+        assert_eq!(kv.value, "olah");
         Ok(())
     }
 }
