@@ -65,19 +65,22 @@ impl BTree {
         child_offset: Offset,
     ) -> Result<(), Error> {
         let (median, sibling) = self.create_sibling_from_node(child.clone())?;
-
         // Write the child with its new data to disk.
         self.pager
-            .write_page_at_offset(Page::try_from(child)?, child_offset)?;
-
+        .write_page_at_offset(Page::try_from(child)?, child_offset.clone())?;
+        
         // Write the newly created sibling to disk.
         let sibling_offset = self.pager.write_page(Page::try_from(sibling)?)?;
-
+        
         // Update the parent with the new key and child.
         match parent.node_type {
             NodeType::Internal(ref mut parent_children, ref mut parent_keys) => {
                 parent_children.push(sibling_offset);
                 parent_keys.push(median);
+            },
+            NodeType::Leaf(_) => {
+                // This can only happen when the root is split.
+                parent.node_type = NodeType::Internal(vec![sibling_offset, child_offset.clone()], vec![median]);  
             }
             _ => return Err(Error::UnexpectedError),
         }
