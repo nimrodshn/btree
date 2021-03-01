@@ -80,7 +80,7 @@ impl BTree {
             },
             NodeType::Leaf(_) => {
                 // This can only happen when the root is split.
-                parent.node_type = NodeType::Internal(vec![sibling_offset, child_offset.clone()], vec![median]);  
+                parent.node_type = NodeType::Internal(vec![sibling_offset, child_offset], vec![median]);  
             }
             _ => return Err(Error::UnexpectedError),
         }
@@ -195,12 +195,12 @@ impl BTree {
                 if is_full {
                     self.split_child(
                         node.clone(),
-                        node_offset.clone(),
+                        node_offset,
                         child.clone(),
                         child_offset.clone(),
                     )?;
                 }
-                self.insert_non_full(child.clone(), child_offset.clone(), kv)
+                self.insert_non_full(child, child_offset.clone(), kv)
             }
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
