@@ -94,21 +94,21 @@ impl BTree {
 
     /// create_sibling_from_node creates a sibling node from a given node
     /// by splitting the node in two. In addition it return the median key of the original node.
-    fn create_sibling_from_node(&mut self, node: Box<Node>) -> Result<(Key, Box<Node>), Error> {
+    fn create_sibling_from_node(&mut self,mut node: Box<Node>) -> Result<(Key, Box<Node>), Error> {
         match node.node_type {
-            NodeType::Internal(mut children, mut keys) => {
+            NodeType::Internal(ref mut children,ref mut keys) => {
                 let mut sibling_keys = Vec::<Key>::new();
                 let mut sibling_children = Vec::<Offset>::new();
                 // Populate siblings keys.
-                for _i in 1..(self.b - 1) {
-                    let key = keys.pop().ok_or_else(|| Error::UnexpectedError)?;
+                for _i in 1..=(self.b - 1) {
+                    let key = keys.remove(0);
                     sibling_keys.push(key);
                 }
                 // Pop median key - to be added to the parent..
-                let median_key = keys.pop().ok_or_else(|| Error::UnexpectedError)?;
+                let median_key = keys.remove(0);
                 // Populate siblings children.
-                for _i in 1..self.b {
-                    let child = children.pop().ok_or_else(|| Error::UnexpectedError)?;
+                for _i in 1..=self.b {
+                    let child = children.remove(0);
                     sibling_children.push(child);
                 }
                 Ok((
@@ -120,15 +120,17 @@ impl BTree {
                     )),
                 ))
             }
-            NodeType::Leaf(mut pairs) => {
+            NodeType::Leaf(ref mut pairs) => {
                 let mut sibling_pairs = Vec::<KeyValuePair>::new();
                 // Populate siblings pairs.
-                for _i in 1..(self.b - 1) {
-                    let pair = pairs.pop().ok_or_else(|| Error::UnexpectedError)?;
+                for _i in 1..=(self.b - 1) {
+                    let pair = pairs.remove(0);
                     sibling_pairs.push(pair);
                 }
                 // Pop median key.
-                let median_pair = pairs.pop().ok_or_else(|| Error::UnexpectedError)?;
+                let median_pair = pairs.remove(0);
+                sibling_pairs.push(median_pair.clone());
+
                 Ok((
                     Key(median_pair.key),
                     Box::new(Node::new(
@@ -221,22 +223,16 @@ impl BTree {
     fn search_node(&mut self, node: Box<Node>, search: &str) -> Result<KeyValuePair, Error> {
         match node.node_type {
             NodeType::Internal(children, keys) => {
-                for (i, Key(key)) in keys.iter().enumerate() {
-                    if search < key {
-                        // Retrieve child page from disk and deserialize.
-                        let child_offset = children.get(i).ok_or_else(|| Error::UnexpectedError)?;
-                        let page = self.pager.get_page(child_offset.clone())?;
-                        let child_node = Node::try_from(page)?;
-                        return self.search_node(Box::new(child_node), search);
-                    }
-                }
-                Err(Error::KeyNotFound)
+                let idx = keys.binary_search(&Key(search.to_string())).unwrap_or_else(|x| x);
+                // Retrieve child page from disk and deserialize.
+                let child_offset = children.get(idx).ok_or_else(|| Error::UnexpectedError)?;
+                let page = self.pager.get_page(child_offset.clone())?;
+                let child_node = Node::try_from(page)?;
+                return self.search_node(Box::new(child_node), search);
             }
             NodeType::Leaf(pairs) => {
-                for kv_pair in pairs.iter() {
-                    if kv_pair.key.eq(search) {
-                        return Ok(kv_pair.clone());
-                    }
+                if let Ok(idx) = pairs.binary_search_by_key(&search.to_string(), |pair| pair.key.clone())  {
+                    return Ok(pairs[idx].clone());
                 }
                 Err(Error::KeyNotFound)
             }

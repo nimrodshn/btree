@@ -1,10 +1,10 @@
 use std::cmp::{Eq, Ord, Ordering, PartialOrd};
 use std::convert::From;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Offset(pub usize);
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Debug)]
 pub struct Key(pub String);
 
 #[derive(Clone, Eq, Debug)]
@@ -38,7 +38,7 @@ impl KeyValuePair {
 }
 
 // NodeType Represents different node types in the BTree.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum NodeType {
     /// Internal nodes contain a vector of pointers to their children and a vector of keys.
     Internal(Vec<Offset>, Vec<Key>),
