@@ -59,10 +59,7 @@ pub trait ToByte {
 
 impl FromByte for u8 {
     fn from_byte(&self) -> bool {
-        match self {
-            0x01 => true,
-            _ => false,
-        }
+        matches!(self, 0x01)
     }
 }
 

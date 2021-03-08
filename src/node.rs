@@ -26,6 +26,58 @@ impl Node {
             parent_offset,
         }
     }
+
+    /// split creates a sibling node from a given node
+    /// by splitting the node in two. In addition it return the median key of the original node.
+    pub fn split(&mut self, b: usize) -> Result<(Key, Node), Error> {
+        match self.node_type {
+            NodeType::Internal(ref mut children, ref mut keys) => {
+                let mut sibling_keys = Vec::<Key>::new();
+                let mut sibling_children = Vec::<Offset>::new();
+                // Populate siblings keys.
+                for _i in 1..=(b - 1) {
+                    let key = keys.remove(0);
+                    sibling_keys.push(key);
+                }
+                // Pop median key - to be added to the parent..
+                let median_key = keys.remove(0);
+                // Populate siblings children.
+                for _i in 1..=b {
+                    let child = children.remove(0);
+                    sibling_children.push(child);
+                }
+                Ok((
+                    median_key,
+                    Node::new(
+                        NodeType::Internal(sibling_children, sibling_keys),
+                        false,
+                        self.parent_offset.clone(),
+                    ),
+                ))
+            }
+            NodeType::Leaf(ref mut pairs) => {
+                let mut sibling_pairs = Vec::<KeyValuePair>::new();
+                // Populate siblings pairs.
+                for _i in 1..=(b - 1) {
+                    let pair = pairs.remove(0);
+                    sibling_pairs.push(pair);
+                }
+                // Pop median key.
+                let median_pair = pairs.remove(0);
+                sibling_pairs.push(median_pair.clone());
+
+                Ok((
+                    Key(median_pair.key),
+                    Node::new(
+                        NodeType::Leaf(sibling_pairs),
+                        false,
+                        self.parent_offset.clone(),
+                    ),
+                ))
+            }
+            NodeType::Unexpected => Err(Error::UnexpectedError),
+        }
+    }
 }
 
 /// Implement TryFrom<Page> for Node allowing for easier
@@ -146,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn get_keys_work_for_internal_node() -> Result<(), Error> {
+    fn page_to_node_works_for_internal_node() -> Result<(), Error> {
         use crate::node_type::Key;
         const DATA_LEN: usize = INTERNAL_NODE_HEADER_SIZE + 3 * PTR_SIZE + 2 * KEY_SIZE;
         let page_data: [u8; DATA_LEN] = [
@@ -170,7 +222,7 @@ mod tests {
 
         let node = Node::try_from(Page::new(page))?;
 
-        if let NodeType::Internal(children, keys) = node.node_type {
+        if let NodeType::Internal(_, keys) = node.node_type {
             assert_eq!(keys.len(), 2);
 
             let Key(first_key) = match keys.get(0) {
@@ -188,5 +240,15 @@ mod tests {
         }
 
         Err(Error::UnexpectedError)
+    }
+
+    #[test]
+    fn split_leaf_works() -> Result<(), Error> {
+        Ok(())
+    }
+
+    #[test]
+    fn split_internal_works() -> Result<(), Error> {
+        Ok(())
     }
 }

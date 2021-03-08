@@ -88,9 +88,9 @@ impl Page {
 
 /// Implement TryFrom<Box<Node>> for Page allowing for easier
 /// serialization of data from a Node to an on-disk formatted page.
-impl TryFrom<Box<Node>> for Page {
+impl TryFrom<&Node> for Page {
     type Error = Error;
-    fn try_from(node: Box<Node>) -> Result<Page, Error> {
+    fn try_from(node: &Node) -> Result<Page, Error> {
         let mut data: [u8; PAGE_SIZE] = [0x00; PAGE_SIZE];
         // is_root byte
         data[IS_ROOT_OFFSET] = node.is_root.to_byte();
