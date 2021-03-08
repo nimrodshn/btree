@@ -122,11 +122,7 @@ impl BTree {
         self.search_node(root, &key)
     }
 
-    /// search_node recursively searches a sub tree rooted at node for a key
-    /// using a Pager to request pages as it traverses the subtree.
-    /// if we have traveresed all the way to the leaves and the key was not found the method
-    /// returns the leaf node and None indicating the key was not found,
-    /// otherwise, continues recursively or return the appropriate error.
+    /// search_node recursively searches a sub tree rooted at node for a key.
     fn search_node(&mut self, node: Node, search: &str) -> Result<KeyValuePair, Error> {
         match node.node_type {
             NodeType::Internal(children, keys) => {
