@@ -27,8 +27,7 @@ impl Node {
         }
     }
 
-    /// split creates a sibling node from a given node
-    /// by splitting the node in two. In addition it return the median key of the original node.
+    /// split creates a sibling node from a given node by splitting the node in two around a median.
     pub fn split(&mut self, b: usize) -> Result<(Key, Node), Error> {
         match self.node_type {
             NodeType::Internal(ref mut children, ref mut keys) => {
