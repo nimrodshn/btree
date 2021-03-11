@@ -22,7 +22,7 @@ pub struct BTree {
 impl BTree {
     fn new(path: &Path, b: usize) -> Result<BTree, Error> {
         let mut pager = Pager::new(&path)?;
-        let root = Node::new(NodeType::Leaf(Vec::<KeyValuePair>::new()), true, None);
+        let root = Node::new(NodeType::Leaf(vec![]), true, None);
         let root_offset = pager.write_page(Page::try_from(&root)?)?;
         Ok(BTree {
             pager,
@@ -46,11 +46,7 @@ impl BTree {
         if self.is_node_full(&root)? {
             let mut old_root = &mut root;
             let old_root_offset = self.root_offset.clone();
-            let mut new_root = Node::new(
-                NodeType::Internal(vec![], vec![]),
-                true,
-                None,
-            );
+            let mut new_root = Node::new(NodeType::Internal(vec![], vec![]), true, None);
             // write the new root to disk.
             let new_root_offset = self.pager.write_page(Page::try_from(&new_root)?)?;
             // Set the current roots parent to the new root.

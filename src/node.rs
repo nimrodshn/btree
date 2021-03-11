@@ -169,7 +169,7 @@ mod tests {
         Node, Page, INTERNAL_NODE_HEADER_SIZE, KEY_SIZE, LEAF_NODE_HEADER_SIZE, PTR_SIZE,
         VALUE_SIZE,
     };
-    use crate::node_type::NodeType;
+    use crate::node_type::{Key, NodeType};
     use crate::page_layout::PAGE_SIZE;
     use std::convert::TryFrom;
 
@@ -243,11 +243,83 @@ mod tests {
 
     #[test]
     fn split_leaf_works() -> Result<(), Error> {
+        use crate::node::Node;
+        use crate::node_type::KeyValuePair;
+        let mut node = Node::new(
+            NodeType::Leaf(vec![
+                KeyValuePair::new("foo".to_string(), "bar".to_string()),
+                KeyValuePair::new("lebron".to_string(), "james".to_string()),
+                KeyValuePair::new("ariana".to_string(), "grande".to_string()),
+            ]),
+            true,
+            None,
+        );
+
+        let (median, sibling) = node.split(2)?;
+        assert_eq!(median, Key("lebron".to_string()));
+        assert_eq!(
+            sibling.node_type,
+            NodeType::Leaf(vec![
+                KeyValuePair {
+                    key: "foo".to_string(),
+                    value: "bar".to_string()
+                },
+                KeyValuePair {
+                    key: "lebron".to_string(),
+                    value: "james".to_string()
+                }
+            ])
+        );
+        assert_eq!(
+            node.node_type,
+            NodeType::Leaf(vec![KeyValuePair::new(
+                "ariana".to_string(),
+                "grande".to_string()
+            )])
+        );
         Ok(())
     }
 
     #[test]
     fn split_internal_works() -> Result<(), Error> {
+        use crate::node::Node;
+        use crate::node_type::NodeType;
+        use crate::node_type::{Key, Offset};
+        use crate::page_layout::PAGE_SIZE;
+        let mut node = Node::new(
+            NodeType::Internal(
+                vec![
+                    Offset(PAGE_SIZE),
+                    Offset(PAGE_SIZE * 2),
+                    Offset(PAGE_SIZE * 3),
+                    Offset(PAGE_SIZE * 4),
+                ],
+                vec![
+                    Key("foo bar".to_string()),
+                    Key("lebron".to_string()),
+                    Key("ariana".to_string()),
+                ],
+            ),
+            true,
+            None,
+        );
+
+        let (median, sibling) = node.split(2)?;
+        assert_eq!(median, Key("lebron".to_string()));
+        assert_eq!(
+            sibling.node_type,
+            NodeType::Internal(
+                vec![Offset(PAGE_SIZE), Offset(PAGE_SIZE * 2),],
+                vec![Key("foo bar".to_string())]
+            )
+        );
+        assert_eq!(
+            node.node_type,
+            NodeType::Internal(
+                vec![Offset(PAGE_SIZE * 3), Offset(PAGE_SIZE * 4)],
+                vec![Key("ariana".to_string())]
+            )
+        );
         Ok(())
     }
 }

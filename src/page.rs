@@ -194,3 +194,56 @@ impl TryFrom<&[u8]> for Value {
         Ok(Value(usize::from_be_bytes(truncated_arr)))
     }
 }
+
+mod tests {
+    use crate::error::Error;
+    use crate::node::Node;
+    use crate::node_type::{KeyValuePair, NodeType};
+    use crate::page::Page;
+    use std::convert::TryFrom;
+    #[test]
+    fn node_to_page_works_for_leaf_node() -> Result<(), Error> {
+        let some_leaf = Node::new(
+            NodeType::Leaf(vec![
+                KeyValuePair::new("foo".to_string(), "bar".to_string()),
+                KeyValuePair::new("lebron".to_string(), "james".to_string()),
+                KeyValuePair::new("ariana".to_string(), "grande".to_string()),
+            ]),
+            true,
+            None,
+        );
+
+        // Serialize data.
+        let page = Page::try_from(&some_leaf)?;
+        // Deserialize back the page.
+        let res = Node::try_from(page)?;
+
+        assert_eq!(res.is_root, some_leaf.is_root);
+        assert_eq!(res.node_type, some_leaf.node_type);
+        assert_eq!(res.parent_offset, some_leaf.parent_offset);
+        Ok(())
+    }
+
+    #[test]
+    fn node_to_page_works_for_internal_node() -> Result<(), Error> {
+        let some_leaf = Node::new(
+            NodeType::Leaf(vec![
+                KeyValuePair::new("foo".to_string(), "bar".to_string()),
+                KeyValuePair::new("lebron".to_string(), "james".to_string()),
+                KeyValuePair::new("ariana".to_string(), "grande".to_string()),
+            ]),
+            true,
+            None,
+        );
+
+        // Serialize data.
+        let page = Page::try_from(&some_leaf)?;
+        // Deserialize back the page.
+        let res = Node::try_from(page)?;
+
+        assert_eq!(res.is_root, some_leaf.is_root);
+        assert_eq!(res.node_type, some_leaf.node_type);
+        assert_eq!(res.parent_offset, some_leaf.parent_offset);
+        Ok(())
+    }
+}
