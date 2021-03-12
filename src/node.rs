@@ -31,20 +31,12 @@ impl Node {
     pub fn split(&mut self, b: usize) -> Result<(Key, Node), Error> {
         match self.node_type {
             NodeType::Internal(ref mut children, ref mut keys) => {
-                let mut sibling_keys = Vec::<Key>::new();
-                let mut sibling_children = Vec::<Offset>::new();
                 // Populate siblings keys.
-                for _i in 1..=(b - 1) {
-                    let key = keys.remove(0);
-                    sibling_keys.push(key);
-                }
+                let mut sibling_keys = keys.split_off(b-1);
                 // Pop median key - to be added to the parent..
-                let median_key = keys.remove(0);
+                let median_key = sibling_keys.remove(0);
                 // Populate siblings children.
-                for _i in 1..=b {
-                    let child = children.remove(0);
-                    sibling_children.push(child);
-                }
+                let sibling_children = children.split_off(b);
                 Ok((
                     median_key,
                     Node::new(
@@ -55,15 +47,10 @@ impl Node {
                 ))
             }
             NodeType::Leaf(ref mut pairs) => {
-                let mut sibling_pairs = Vec::<KeyValuePair>::new();
                 // Populate siblings pairs.
-                for _i in 1..=(b - 1) {
-                    let pair = pairs.remove(0);
-                    sibling_pairs.push(pair);
-                }
+                let sibling_pairs = pairs.split_off(b);
                 // Pop median key.
-                let median_pair = pairs.remove(0);
-                sibling_pairs.push(median_pair.clone());
+                let median_pair = pairs.get(b-1).ok_or(Error::UnexpectedError)?.clone();
 
                 Ok((
                     Key(median_pair.key),
@@ -258,7 +245,7 @@ mod tests {
         let (median, sibling) = node.split(2)?;
         assert_eq!(median, Key("lebron".to_string()));
         assert_eq!(
-            sibling.node_type,
+            node.node_type,
             NodeType::Leaf(vec![
                 KeyValuePair {
                     key: "foo".to_string(),
@@ -271,7 +258,7 @@ mod tests {
             ])
         );
         assert_eq!(
-            node.node_type,
+            sibling.node_type,
             NodeType::Leaf(vec![KeyValuePair::new(
                 "ariana".to_string(),
                 "grande".to_string()
@@ -307,14 +294,14 @@ mod tests {
         let (median, sibling) = node.split(2)?;
         assert_eq!(median, Key("lebron".to_string()));
         assert_eq!(
-            sibling.node_type,
+            node.node_type,
             NodeType::Internal(
-                vec![Offset(PAGE_SIZE), Offset(PAGE_SIZE * 2),],
+                vec![Offset(PAGE_SIZE), Offset(PAGE_SIZE * 2)],
                 vec![Key("foo bar".to_string())]
             )
         );
         assert_eq!(
-            node.node_type,
+            sibling.node_type,
             NodeType::Internal(
                 vec![Offset(PAGE_SIZE * 3), Offset(PAGE_SIZE * 4)],
                 vec![Key("ariana".to_string())]

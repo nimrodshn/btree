@@ -62,7 +62,7 @@ impl BTree {
             let sibling_offset = self.pager.write_page(Page::try_from(&sibling)?)?;
             // Update the new root with its children and key.
             new_root.node_type =
-                NodeType::Internal(vec![sibling_offset, old_root_offset], vec![median]);
+                NodeType::Internal(vec![old_root_offset, sibling_offset], vec![median]);
             // Write the new_root to disk.
             self.pager
                 .write_page_at_offset(Page::try_from(&new_root)?, &self.root_offset)?;
