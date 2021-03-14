@@ -2,46 +2,77 @@
 
 **IMPORTANT** 
 
-This project is ongoing and considered work-in-progress - contributions are welcome :).
+This project is ongoing and is considered a work-in-progress for educational purposes.
 
 A **persistent** B+Tree implementation, designed as an index for a key value store, inspired by [SQLite](https://www.sqlite.org/index.html).
 
 ## Design
-This project **only** supports a single index per BTree although multiple trees can be used as multiple indexes in a table.
+Each `BTree` struct is associated with a file that contains its nodes. Each node has a predefined structure.
 
-Each `BTree` struct is associated with a file that contains its nodes (see `src/pager.rs`). The `BTree` root is always at offset zero. Each node is persisted in the associated file and has a predefined structure.
+Unit tests serve as helpful examples of API usage.
 
-## A Leaf Node structure - a simple example
-There are two `NodeType` variants: `Internal` and `Leaf` (see `src/node.rs`). Each variant has its own defined structure on disk, for example, the `Leaf` type might look like:
+## On disk nodes structure
+There are two `NodeType` variants: `Internal` and `Leaf`: Each variant has its own predefined structure on disk;
+A leaf node has the following structure:
 ```
-   0x01,                                           // Is-Root byte.
-   0x02,                                           // Node type byte.
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, // Number of Key-Value pairs.
-   0x68, 0x65, 0x6c, 0x6c, 0x6f,                   // "hello"
-   0x77, 0x6f, 0x72, 0x6c, 0x64,                   // "world"
+| IS-ROOT 1-byte| NODE-TYPE 1-byte | PARENT OFFSET - 8 bytes | Number of pairs - 8 bytes |
+| Key #0 - 10 bytes | Value #0 - 10 bytes | ...
+| Key #N - 10 bytes | Value #N - 10 bytes |
 ```
 
-Both Key and Value are both persisted in the tress nodes; values are persisted in the leaf nodes to avoid an extra disk access for values.
-
-As a consequence the values and keys are limited in size to 10 Bytes long.
-
-## An Internal Node structure - a simple example
-Here is a simple example of an "internal" node:
+While the structure of an internal node on disk is the following:
 ```
-   0x01, // Is-Root byte.
-   0x01, // Node type byte.
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Parent offset.
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, // Number of children.
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, // 4096  (2nd Page)
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, // 8192  (3rd Page)
-   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00, // 12288 (4th Page)
-   0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x00, 0x00, // "hello"
-   0x77, 0x6f, 0x72, 0x6c, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, // "world"
+| IS-ROOT 1-byte | NODE-TYPE 1-byte | PARENT OFFSET - 8 bytes | Number of children - 8 bytes |
+| Key #0 - 10 bytes | Key #2 - 10 bytes | ...
+| Child Offset #0 - 8 bytes | Child offset #1 - 8 bytes | ...
 ```
-Note that the number of keys in an internal node is always one less than the number of child pointers.
 
-For more information about the on-disk data strcuture see the tests at `src/nodes.rs`.
+## API
+
+### From disk to memory and back
+Nodes are mapped to pages on disk with `TryFrom` methods implemented for easier de/serialization of nodes to pages and back.
+
+```
+let some_leaf = Node::new(
+   NodeType::Leaf(vec![
+         KeyValuePair::new("foo".to_string(), "bar".to_string()),
+         KeyValuePair::new("lebron".to_string(), "james".to_string()),
+         KeyValuePair::new("ariana".to_string(), "grande".to_string()),
+   ]),
+   true,
+   None,
+);
+
+// Serialize data.
+let page = Page::try_from(&some_leaf)?;
+// Deserialize back the page.
+let res = Node::try_from(page)?;
+```
+
+See tests at `src/page.rs` and `src/node.rs` for more information.
+
+### Writing and Reading
+```
+// Initialize a new BTree.
+let mut btree = BTree::new(
+   Path::new("/tmp/db"),   // the tree file
+   2                       // t parameter (a full node contains 2*t-1 = 3 keys.)
+)?;
+
+// Write some data.
+btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
+btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
+btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
+
+// Read it back.
+let mut kv = btree.search("b".to_string())?;
+assert_eq!(kv.key, "b");
+assert_eq!(kv.value, "hello");
+
+kv = btree.search("c".to_string())?;
+assert_eq!(kv.key, "c");
+assert_eq!(kv.value, "marhaba");
+```
 
 ## License
 MIT.
