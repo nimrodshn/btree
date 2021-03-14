@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 use std::str;
 
 /// Node represents a node in the BTree occupied by a single page in memory.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Node {
     pub node_type: NodeType,
     pub is_root: bool,
@@ -32,7 +32,7 @@ impl Node {
         match self.node_type {
             NodeType::Internal(ref mut children, ref mut keys) => {
                 // Populate siblings keys.
-                let mut sibling_keys = keys.split_off(b-1);
+                let mut sibling_keys = keys.split_off(b - 1);
                 // Pop median key - to be added to the parent..
                 let median_key = sibling_keys.remove(0);
                 // Populate siblings children.
@@ -50,7 +50,7 @@ impl Node {
                 // Populate siblings pairs.
                 let sibling_pairs = pairs.split_off(b);
                 // Pop median key.
-                let median_pair = pairs.get(b-1).ok_or(Error::UnexpectedError)?.clone();
+                let median_pair = pairs.get(b - 1).ok_or(Error::UnexpectedError)?.clone();
 
                 Ok((
                     Key(median_pair.key),

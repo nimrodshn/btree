@@ -197,12 +197,14 @@ impl TryFrom<&[u8]> for Value {
 
 mod tests {
     use crate::error::Error;
-    use crate::node::Node;
-    use crate::node_type::{KeyValuePair, NodeType};
-    use crate::page::Page;
-    use std::convert::TryFrom;
+
     #[test]
     fn node_to_page_works_for_leaf_node() -> Result<(), Error> {
+        use crate::node::Node;
+        use crate::node_type::{KeyValuePair, NodeType};
+        use crate::page::Page;
+        use std::convert::TryFrom;
+
         let some_leaf = Node::new(
             NodeType::Leaf(vec![
                 KeyValuePair::new("foo".to_string(), "bar".to_string()),
@@ -226,24 +228,38 @@ mod tests {
 
     #[test]
     fn node_to_page_works_for_internal_node() -> Result<(), Error> {
-        let some_leaf = Node::new(
-            NodeType::Leaf(vec![
-                KeyValuePair::new("foo".to_string(), "bar".to_string()),
-                KeyValuePair::new("lebron".to_string(), "james".to_string()),
-                KeyValuePair::new("ariana".to_string(), "grande".to_string()),
-            ]),
+        use crate::node::Node;
+        use crate::node_type::{Key, NodeType, Offset};
+        use crate::page::Page;
+        use crate::page_layout::PAGE_SIZE;
+        use std::convert::TryFrom;
+
+        let internal_node = Node::new(
+            NodeType::Internal(
+                vec![
+                    Offset(PAGE_SIZE),
+                    Offset(PAGE_SIZE * 2),
+                    Offset(PAGE_SIZE * 3),
+                    Offset(PAGE_SIZE * 4),
+                ],
+                vec![
+                    Key("foo bar".to_string()),
+                    Key("lebron".to_string()),
+                    Key("ariana".to_string()),
+                ],
+            ),
             true,
             None,
         );
 
         // Serialize data.
-        let page = Page::try_from(&some_leaf)?;
+        let page = Page::try_from(&internal_node)?;
         // Deserialize back the page.
         let res = Node::try_from(page)?;
 
-        assert_eq!(res.is_root, some_leaf.is_root);
-        assert_eq!(res.node_type, some_leaf.node_type);
-        assert_eq!(res.parent_offset, some_leaf.parent_offset);
+        assert_eq!(res.is_root, internal_node.is_root);
+        assert_eq!(res.node_type, internal_node.node_type);
+        assert_eq!(res.parent_offset, internal_node.parent_offset);
         Ok(())
     }
 }

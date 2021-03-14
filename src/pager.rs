@@ -18,6 +18,7 @@ impl Pager {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(true)
             .open(path)?;
 
         Ok(Pager {
