@@ -12,7 +12,7 @@ Each `BTree` struct is associated with a file that contains its nodes. Each node
 Unit tests serve as helpful examples of API usage.
 
 ## On disk nodes structure
-There are two `NodeType` variants: `Internal` and `Leaf`: Each variant has its own predefined structure on disk;
+There are two `NodeType` variants - `Internal` and `Leaf`; Each variant has its own predefined structure on disk.
 A leaf node has the following structure:
 ```
 | IS-ROOT 1-byte| NODE-TYPE 1-byte | PARENT OFFSET - 8 bytes | Number of pairs - 8 bytes |
