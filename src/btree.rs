@@ -19,18 +19,64 @@ pub struct BTree {
     root_offset: Offset,
 }
 
-impl BTree {
-    fn new(path: &Path, b: usize) -> Result<BTree, Error> {
-        let mut pager = Pager::new(&path)?;
+/// BtreeBuilder is a Builder for the BTree struct.
+pub struct BTreeBuilder {
+    /// Path to the tree file.
+    path: &'static Path,
+    /// The BTree parameter, a node contains no more than 2*b-1 keys and no less than b-1 keys
+    /// and no more than 2*b children and no less than b children.
+    b: usize,
+}
+
+impl BTreeBuilder {
+    pub fn new() -> BTreeBuilder {
+        BTreeBuilder {
+            path: Path::new(""),
+            b: 0,
+        }
+    }
+
+    pub fn path(mut self, path: &'static Path) -> BTreeBuilder {
+        self.path = path;
+        self
+    }
+
+    pub fn b_parameter(mut self, b: usize) -> BTreeBuilder {
+        self.b = b;
+        self
+    }
+
+    pub fn build(&self) -> Result<BTree, Error> {
+        if self.path.to_string_lossy() == "" {
+            return Err(Error::UnexpectedError);
+        }
+        if self.b == 0 {
+            return Err(Error::UnexpectedError);
+        }
+
+        let mut pager = Pager::new(&self.path)?;
         let root = Node::new(NodeType::Leaf(vec![]), true, None);
         let root_offset = pager.write_page(Page::try_from(&root)?)?;
         Ok(BTree {
             pager,
-            b,
+            b: self.b,
             root_offset,
         })
     }
+}
 
+impl Default for BTreeBuilder {
+    // A default BTreeBuilder provides a builder with:
+    /// - b parameter set to 200
+    /// - path set to '/tmp/db'.
+    fn default() -> Self {
+        BTreeBuilder::new()
+            .b_parameter(200)
+            .path(Path::new("/tmp/db"))
+    }
+}
+
+impl BTree {
     fn is_node_full(&self, node: &Node) -> Result<bool, Error> {
         match &node.node_type {
             NodeType::Leaf(pairs) => Ok(pairs.len() == (2 * self.b - 1)),
@@ -153,11 +199,14 @@ mod tests {
 
     #[test]
     fn search_works() -> Result<(), Error> {
-        use crate::btree::BTree;
+        use crate::btree::BTreeBuilder;
         use crate::node_type::KeyValuePair;
         use std::path::Path;
 
-        let mut btree = BTree::new(Path::new("/tmp/db"), 2)?;
+        let mut btree = BTreeBuilder::new()
+            .path(Path::new("/tmp/db"))
+            .b_parameter(2)
+            .build()?;
         btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
@@ -174,11 +223,14 @@ mod tests {
 
     #[test]
     fn insert_works() -> Result<(), Error> {
-        use crate::btree::BTree;
+        use crate::btree::BTreeBuilder;
         use crate::node_type::KeyValuePair;
         use std::path::Path;
 
-        let mut btree = BTree::new(Path::new("/tmp/db"), 2)?;
+        let mut btree = BTreeBuilder::new()
+            .path(Path::new("/tmp/db"))
+            .b_parameter(2)
+            .build()?;
         btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;

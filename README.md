@@ -54,10 +54,10 @@ See tests at `src/page.rs` and `src/node.rs` for more information.
 ### Writing and Reading
 ```
 // Initialize a new BTree.
-let mut btree = BTree::new(
-   Path::new("/tmp/db"),   // the tree file
-   2                       // t parameter (a full node contains 2*t-1 = 3 keys.)
-)?;
+ let mut btree = BTreeBuilder::new()
+            .path(Path::new("/tmp/db"))
+            .b_parameter(2)
+            .build()?;
 
 // Write some data.
 btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
