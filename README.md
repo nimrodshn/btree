@@ -1,5 +1,7 @@
 # btree
 
+[![Build status](https://github.com/nimrodshn/btree/actions/workflows/build.yml/badge.svg)](https://github.com/nimrodshn/btree/actions)
+
 **IMPORTANT** 
 
 This project is ongoing and is considered a work-in-progress for educational purposes.
