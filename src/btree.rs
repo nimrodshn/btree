@@ -51,6 +51,7 @@ impl BTree {
             let new_root_offset = self.pager.write_page(Page::try_from(&new_root)?)?;
             // Set the current roots parent to the new root.
             old_root.parent_offset = Some(new_root_offset.clone());
+            old_root.is_root = false;
             // update the root offset.
             self.root_offset = new_root_offset;
             // split the old root.
@@ -66,6 +67,8 @@ impl BTree {
             // Write the new_root to disk.
             self.pager
                 .write_page_at_offset(Page::try_from(&new_root)?, &self.root_offset)?;
+            // Assign the new root.
+            root = new_root;
         }
         self.insert_non_full(&mut root, self.root_offset.clone(), kv)
     }
@@ -181,9 +184,17 @@ mod tests {
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
         btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
 
-        let mut kv = btree.search("b".to_string())?;
+        let mut kv = btree.search("a".to_string())?;
+        assert_eq!(kv.key, "a");
+        assert_eq!(kv.value, "shalom");
+
+        kv = btree.search("b".to_string())?;
         assert_eq!(kv.key, "b");
         assert_eq!(kv.value, "hello");
+
+        kv = btree.search("c".to_string())?;
+        assert_eq!(kv.key, "c");
+        assert_eq!(kv.value, "marhaba");
 
         kv = btree.search("d".to_string())?;
         assert_eq!(kv.key, "d");
