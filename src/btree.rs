@@ -23,7 +23,7 @@ pub struct BTree {
 pub struct BTreeBuilder {
     /// Path to the tree file.
     path: &'static Path,
-    /// The BTree parameter, a node contains no more than 2*b-1 keys and no less than b-1 keys
+    /// The BTree parameter, an inner node contains no more than 2*b-1 keys and no less than b-1 keys
     /// and no more than 2*b children and no less than b children.
     b: usize,
 }

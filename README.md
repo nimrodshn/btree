@@ -55,7 +55,9 @@ See tests at `src/page.rs` and `src/node.rs` for more information.
 
 ### Writing and Reading
 ```
-// Initialize a new BTree.
+// Initialize a new BTree;
+// The BTree nodes are stored in file '/tmp/db' (created if does not exist)
+// with parameter b=2.
  let mut btree = BTreeBuilder::new()
             .path(Path::new("/tmp/db"))
             .b_parameter(2)
