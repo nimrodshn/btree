@@ -4,11 +4,11 @@ use crate::node_type::{Key, KeyValuePair, NodeType, Offset};
 use crate::page::Page;
 use crate::pager::Pager;
 use std::convert::TryFrom;
+use std::fmt;
 use std::path::Path;
 
 /// B+Tree properties.
 pub const MAX_BRANCHING_FACTOR: usize = 200;
-pub const MIN_BRANCHING_FACTOR: usize = 100;
 pub const NODE_KEYS_LIMIT: usize = MAX_BRANCHING_FACTOR - 1;
 
 /// BTree struct represents an on-disk B+tree.
@@ -191,6 +191,36 @@ impl BTree {
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
+
+    /// print_sub_tree is a helper function for recursively printing the nodes rooted at a node given by its offset.
+    fn print_sub_tree(&mut self, prefix: String, offset: Offset) -> Result<(), Error> {
+        println!("{}Node at offset: {}",prefix, offset.0);
+        let curr_prefix = format!("{}|->", prefix);
+        let page = self.pager.get_page(&offset)?;
+        let node = Node::try_from(page)?;
+        match node.node_type {
+            NodeType::Internal(children, keys) => {
+                println!("{}Keys: {:?}", curr_prefix, keys);
+                println!("{}Children: {:?}", curr_prefix, children);
+                let child_prefix = format!("{}   |  ", prefix);
+                for child_offset in children {
+                    self.print_sub_tree(child_prefix.clone(), child_offset)?;
+                }
+                Ok(())
+            }
+            NodeType::Leaf(pairs) => {
+                println!("{}Key value pairs: {:?}",curr_prefix, pairs);
+                Ok(())
+            }
+            NodeType::Unexpected => Err(Error::UnexpectedError),
+        }
+    }
+
+    /// print is a helper for recursively printing the tree.
+    pub fn print(&mut self) -> Result<(), Error> {
+        print!("\n");
+        self.print_sub_tree("".to_string(), self.root_offset.clone())
+    }
 }
 
 #[cfg(test)]
@@ -218,7 +248,9 @@ mod tests {
         kv = btree.search("c".to_string())?;
         assert_eq!(kv.key, "c");
         assert_eq!(kv.value, "marhaba");
-        Ok(())
+
+        // Sanity check:
+        btree.print()
     }
 
     #[test]
@@ -251,6 +283,8 @@ mod tests {
         kv = btree.search("d".to_string())?;
         assert_eq!(kv.key, "d");
         assert_eq!(kv.value, "olah");
-        Ok(())
+
+        // Sanity check:
+        btree.print()
     }
 }
