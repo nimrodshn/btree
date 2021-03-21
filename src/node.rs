@@ -28,6 +28,8 @@ impl Node {
     }
 
     /// split creates a sibling node from a given node by splitting the node in two around a median.
+    /// split will split the child at b leaving the [0, b-1] keys
+    /// while moving the set of [b, 2b-1] keys to the sibling.
     pub fn split(&mut self, b: usize) -> Result<(Key, Node), Error> {
         match self.node_type {
             NodeType::Internal(ref mut children, ref mut keys) => {

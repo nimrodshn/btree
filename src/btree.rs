@@ -4,7 +4,6 @@ use crate::node_type::{Key, KeyValuePair, NodeType, Offset};
 use crate::page::Page;
 use crate::pager::Pager;
 use std::convert::TryFrom;
-use std::fmt;
 use std::path::Path;
 
 /// B+Tree properties.
@@ -142,19 +141,29 @@ impl BTree {
                 let child_page = self.pager.get_page(&child_offset)?;
                 let mut child = Node::try_from(child_page)?;
                 if self.is_node_full(&child)? {
-                    let (median, sibling) = child.split(self.b)?;
+                    // split will split the child at b leaving the [0, b-1] keys
+                    // while moving the set of [b, 2b-1] keys to the sibling.
+                    let (median, mut sibling) = child.split(self.b)?;
                     self.pager
                         .write_page_at_offset(Page::try_from(&child)?, &child_offset)?;
                     // Write the newly created sibling to disk.
                     let sibling_offset = self.pager.write_page(Page::try_from(&sibling)?)?;
-                    children.insert(idx, sibling_offset);
-                    keys.insert(idx, median);
+                    // Siblings keys are larger than the splitted child thus need to be inserted
+                    // at the next index.
+                    children.insert(idx + 1, sibling_offset.clone());
+                    keys.insert(idx, median.clone());
 
                     // Write the parent page to disk.
                     self.pager
                         .write_page_at_offset(Page::try_from(&*node)?, &node_offset)?;
+                    if kv.key <= median.0 {
+                        self.insert_non_full(&mut child, child_offset, kv)
+                    } else {
+                        self.insert_non_full(&mut sibling, sibling_offset, kv)
+                    }
+                } else {
+                    self.insert_non_full(&mut child, child_offset, kv)
                 }
-                self.insert_non_full(&mut child, child_offset, kv)
             }
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
@@ -194,7 +203,7 @@ impl BTree {
 
     /// print_sub_tree is a helper function for recursively printing the nodes rooted at a node given by its offset.
     fn print_sub_tree(&mut self, prefix: String, offset: Offset) -> Result<(), Error> {
-        println!("{}Node at offset: {}",prefix, offset.0);
+        println!("{}Node at offset: {}", prefix, offset.0);
         let curr_prefix = format!("{}|->", prefix);
         let page = self.pager.get_page(&offset)?;
         let node = Node::try_from(page)?;
@@ -209,7 +218,7 @@ impl BTree {
                 Ok(())
             }
             NodeType::Leaf(pairs) => {
-                println!("{}Key value pairs: {:?}",curr_prefix, pairs);
+                println!("{}Key value pairs: {:?}", curr_prefix, pairs);
                 Ok(())
             }
             NodeType::Unexpected => Err(Error::UnexpectedError),
@@ -218,7 +227,7 @@ impl BTree {
 
     /// print is a helper for recursively printing the tree.
     pub fn print(&mut self) -> Result<(), Error> {
-        print!("\n");
+        println!();
         self.print_sub_tree("".to_string(), self.root_offset.clone())
     }
 }
@@ -267,6 +276,10 @@ mod tests {
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
         btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
+        btree.insert(KeyValuePair::new("e".to_string(), "salam".to_string()))?;
+        btree.insert(KeyValuePair::new("f".to_string(), "hallo".to_string()))?;
+        btree.insert(KeyValuePair::new("g".to_string(), "Konnichiwa".to_string()))?;
+        btree.insert(KeyValuePair::new("h".to_string(), "Ni hao".to_string()))?;
 
         let mut kv = btree.search("a".to_string())?;
         assert_eq!(kv.key, "a");
@@ -284,7 +297,7 @@ mod tests {
         assert_eq!(kv.key, "d");
         assert_eq!(kv.value, "olah");
 
-        // Sanity check:
-        btree.print()
+       // Sanity check:
+       btree.print()
     }
 }
