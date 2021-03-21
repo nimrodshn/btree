@@ -280,6 +280,7 @@ mod tests {
         btree.insert(KeyValuePair::new("f".to_string(), "hallo".to_string()))?;
         btree.insert(KeyValuePair::new("g".to_string(), "Konnichiwa".to_string()))?;
         btree.insert(KeyValuePair::new("h".to_string(), "Ni hao".to_string()))?;
+        btree.insert(KeyValuePair::new("i".to_string(), "Ciao".to_string()))?;
 
         let mut kv = btree.search("a".to_string())?;
         assert_eq!(kv.key, "a");
@@ -296,6 +297,26 @@ mod tests {
         kv = btree.search("d".to_string())?;
         assert_eq!(kv.key, "d");
         assert_eq!(kv.value, "olah");
+
+        kv = btree.search("e".to_string())?;
+        assert_eq!(kv.key, "e");
+        assert_eq!(kv.value, "salam");
+
+        kv = btree.search("f".to_string())?;
+        assert_eq!(kv.key, "f");
+        assert_eq!(kv.value, "hallo");
+
+        kv = btree.search("g".to_string())?;
+        assert_eq!(kv.key, "g");
+        assert_eq!(kv.value, "Konnichiwa");
+
+        kv = btree.search("h".to_string())?;
+        assert_eq!(kv.key, "h");
+        assert_eq!(kv.value, "Ni hao");
+
+        kv = btree.search("i".to_string())?;
+        assert_eq!(kv.key, "i");
+        assert_eq!(kv.value, "Ciao");
 
        // Sanity check:
        btree.print()
