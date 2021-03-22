@@ -3,8 +3,8 @@ pub enum Error {
     KeyNotFound,
     KeyAlreadyExists,
     UnexpectedError,
-    KeyTooLongError,
-    ValueTooLong,
+    KeyOverflowError,
+    ValueOverflowError,
     TryFromSliceError(&'static str),
     UTF8Error,
 }

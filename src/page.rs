@@ -126,7 +126,7 @@ impl TryFrom<&Node> for Page {
                     let key_bytes = key.as_bytes();
                     let mut raw_key: [u8; KEY_SIZE] = [0x00; KEY_SIZE];
                     if key_bytes.len() > KEY_SIZE {
-                        return Err(Error::KeyTooLongError);
+                        return Err(Error::KeyOverflowError);
                     } else {
                         for (i, byte) in key_bytes.iter().enumerate() {
                             raw_key[i] = *byte;
@@ -147,7 +147,7 @@ impl TryFrom<&Node> for Page {
                     let key_bytes = pair.key.as_bytes();
                     let mut raw_key: [u8; KEY_SIZE] = [0x00; KEY_SIZE];
                     if key_bytes.len() > KEY_SIZE {
-                        return Err(Error::KeyTooLongError);
+                        return Err(Error::KeyOverflowError);
                     } else {
                         for (i, byte) in key_bytes.iter().enumerate() {
                             raw_key[i] = *byte;
@@ -159,7 +159,7 @@ impl TryFrom<&Node> for Page {
                     let value_bytes = pair.value.as_bytes();
                     let mut raw_value: [u8; VALUE_SIZE] = [0x00; VALUE_SIZE];
                     if value_bytes.len() > VALUE_SIZE {
-                        return Err(Error::ValueTooLong);
+                        return Err(Error::ValueOverflowError);
                     } else {
                         for (i, byte) in value_bytes.iter().enumerate() {
                             raw_value[i] = *byte;
