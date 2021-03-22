@@ -118,7 +118,7 @@ impl BTree {
         self.insert_non_full(&mut root, self.root_offset.clone(), kv)
     }
 
-    /// insert_non_full (recoursively) finds a node rooted at a given non-full node.
+    /// insert_non_full (recursively) finds a node rooted at a given non-full node.
     /// to insert a given kv pair.
     fn insert_non_full(
         &mut self,
@@ -156,6 +156,7 @@ impl BTree {
                     // Write the parent page to disk.
                     self.pager
                         .write_page_at_offset(Page::try_from(&*node)?, &node_offset)?;
+                    // Continue recursively.
                     if kv.key <= median.0 {
                         self.insert_non_full(&mut child, child_offset, kv)
                     } else {
@@ -201,6 +202,29 @@ impl BTree {
         }
     }
 
+    /// delete deletes a given key from the tree.
+    pub fn delete(&mut self, key: Key) -> Result<(), Error> {
+        Ok(())
+    }
+
+    /// delete key from subtree recursively traverses a tree rooted at a node in certain offset
+    /// until it finds the given key and delets.
+    fn delete_key_from_subtree(&mut self, key: Key, offset: Offset) -> Result<(), Error> {
+        let page = self.pager.get_page(&offset)?;
+        let mut node = Node::try_from(page)?;
+        match &mut node.node_type {
+            NodeType::Leaf(ref mut pairs) => {
+                let node_idx = pairs
+                    .binary_search_by_key(&key, |kv| Key(kv.key.clone()))
+                    .or_else(|_| return Err(Error::KeyNotFound))?;
+                pairs.remove(node_idx);
+            }
+            NodeType::Internal(keys, children) => {}
+            NodeType::Unexpected => return Err(Error::UnexpectedError),
+        }
+        Ok(())
+    }
+
     /// print_sub_tree is a helper function for recursively printing the nodes rooted at a node given by its offset.
     fn print_sub_tree(&mut self, prefix: String, offset: Offset) -> Result<(), Error> {
         println!("{}Node at offset: {}", prefix, offset.0);
@@ -239,7 +263,7 @@ mod tests {
     #[test]
     fn search_works() -> Result<(), Error> {
         use crate::btree::BTreeBuilder;
-        use crate::node_type::KeyValuePair;
+        use crate::node_type::{KeyValuePair};
         use std::path::Path;
 
         let mut btree = BTreeBuilder::new()
@@ -318,7 +342,7 @@ mod tests {
         assert_eq!(kv.key, "i");
         assert_eq!(kv.value, "Ciao");
 
-       // Sanity check:
-       btree.print()
+        // Sanity check:
+        btree.print()
     }
 }
