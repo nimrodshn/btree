@@ -204,7 +204,7 @@ impl BTree {
 
     /// delete deletes a given key from the tree.
     pub fn delete(&mut self, key: Key) -> Result<(), Error> {
-        Ok(())
+        self.delete_key_from_subtree(key, self.root_offset.clone())
     }
 
     /// delete key from subtree recursively traverses a tree rooted at a node in certain offset
