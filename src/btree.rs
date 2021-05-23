@@ -3,6 +3,7 @@ use crate::node::Node;
 use crate::node_type::{Key, KeyValuePair, NodeType, Offset};
 use crate::page::Page;
 use crate::pager::Pager;
+use std::cmp;
 use std::convert::TryFrom;
 use std::path::Path;
 
@@ -80,6 +81,15 @@ impl BTree {
         match &node.node_type {
             NodeType::Leaf(pairs) => Ok(pairs.len() == (2 * self.b - 1)),
             NodeType::Internal(_, keys) => Ok(keys.len() == (2 * self.b - 1)),
+            NodeType::Unexpected => Err(Error::UnexpectedError),
+        }
+    }
+
+    fn is_node_underflow(&self, node: &Node) -> Result<bool, Error> {
+        match &node.node_type {
+            // A root cannot really be "underflowing" as it can contain less than b-1 keys / pointers.
+            NodeType::Leaf(pairs) => Ok(pairs.len() < self.b - 1 && !node.is_root),
+            NodeType::Internal(_, keys) => Ok(keys.len() < self.b - 1 && !node.is_root),
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
@@ -204,25 +214,120 @@ impl BTree {
 
     /// delete deletes a given key from the tree.
     pub fn delete(&mut self, key: Key) -> Result<(), Error> {
-        self.delete_key_from_subtree(key, self.root_offset.clone())
+        self.delete_key_from_subtree(key, &self.root_offset.clone())
     }
 
     /// delete key from subtree recursively traverses a tree rooted at a node in certain offset
     /// until it finds the given key and delets.
-    fn delete_key_from_subtree(&mut self, key: Key, offset: Offset) -> Result<(), Error> {
-        let page = self.pager.get_page(&offset)?;
+    fn delete_key_from_subtree(&mut self, key: Key, offset: &Offset) -> Result<(), Error> {
+        let page = self.pager.get_page(offset)?;
         let mut node = Node::try_from(page)?;
         match &mut node.node_type {
             NodeType::Leaf(ref mut pairs) => {
                 let node_idx = pairs
                     .binary_search_by_key(&key, |kv| Key(kv.key.clone()))
-                    .or_else(|_| return Err(Error::KeyNotFound))?;
+                    .map_err(|_| Error::KeyNotFound)?;
                 pairs.remove(node_idx);
+                // Check for underflow - if it occures,
+                // we need to merge with a sibling.
+                // this can only occur if node is not the root (as it cannot "underflow").
+                // continue recoursively up the tree.
+                self.merge_if_needed(node, &key)?;
             }
-            NodeType::Internal(keys, children) => {}
+            NodeType::Internal(children, keys) => {
+                let node_idx = keys.binary_search(&key).unwrap_or_else(|x| x);
+                // Retrieve child page from disk and deserialize.
+                // And continue recoursively.
+                let child_offset = children.get(node_idx).ok_or(Error::UnexpectedError)?;
+                return self.delete_key_from_subtree(key, child_offset);
+            }
             NodeType::Unexpected => return Err(Error::UnexpectedError),
         }
         Ok(())
+    }
+
+    /// merge_if_needed checks the node for underflow (following a removal of a key),
+    /// if it underflows it is merged with a sibling node, and than called recoursively 
+    /// up the tree.
+    fn merge_if_needed(&mut self, node: Node, key: &Key) -> Result<(), Error> {
+        if self.is_node_underflow(&node)? {
+            // Fetch the sibling from the parent -
+            // This could be quicker if we implement sibling pointers.
+            let parent_offset = node.parent_offset.clone().ok_or(Error::UnexpectedError)?;
+            let parent_page = self.pager.get_page(&parent_offset)?;
+            let mut parent_node = Node::try_from(parent_page)?;
+            // The parent has to be an "internal" node.
+            match parent_node.node_type {
+                NodeType::Internal(ref mut children, ref keys) => {
+                    let idx = keys.binary_search(&key).unwrap_or_else(|x| x);
+                    // The sibling is in idx +- 1 as the above index led
+                    // the downward search to node.
+                    let sibling_idx;
+                    if idx == keys.len() - 1 {
+                        sibling_idx = idx - 1;
+                    } else {
+                        sibling_idx = idx + 1;
+                    }
+
+                    let sibling_offset = children.get(sibling_idx).ok_or(Error::UnexpectedError)?;
+                    let sibling_page = self.pager.get_page(sibling_offset)?;
+                    let sibling = Node::try_from(sibling_page)?;
+                    let merged_node = self.merge(node, sibling)?;
+                    let merged_node_offset =
+                        self.pager.write_page(Page::try_from(&merged_node)?)?;
+                    // remove the old nodes.
+                    children.remove(idx);
+                    children.remove(sibling_idx);
+                    // write the new node in place.
+                    let merged_node_idx = cmp::min(idx, sibling_idx);
+                    children.insert(merged_node_idx, merged_node_offset);
+                    // write the updated parent back to disk and continue up the tree.
+                    self.pager
+                        .write_page_at_offset(Page::try_from(&parent_node)?, &parent_offset)?;
+                    return self.merge_if_needed(parent_node, &key);
+                }
+                _ => return Err(Error::UnexpectedError),
+            }
+        }
+        Ok(())
+    }
+
+    // merges two *sibling* nodes, it assumes the following:
+    // 1. the two nodes are of the same type.
+    // 2. the two nodes do not accumulate to an overflow,
+    // i.e. |first.keys| + |second.keys| <= [2*(b-1) for keys or 2*b for offsets].
+    fn merge(&self, first: Node, second: Node) -> Result<Node, Error> {
+        match first.node_type {
+            NodeType::Leaf(first_pairs) => {
+                if let NodeType::Leaf(second_pairs) = second.node_type {
+                    let merged_pairs: Vec<KeyValuePair> = first_pairs
+                        .into_iter()
+                        .chain(second_pairs.into_iter())
+                        .collect();
+                    let node_type = NodeType::Leaf(merged_pairs);
+                    Ok(Node::new(node_type, first.is_root, first.parent_offset))
+                } else {
+                    Err(Error::UnexpectedError)
+                }
+            }
+            NodeType::Internal(first_offsets, first_keys) => {
+                if let NodeType::Internal(second_offsets, second_keys) = second.node_type {
+                    let merged_keys: Vec<Key> = first_keys
+                        .into_iter()
+                        .chain(second_keys.into_iter())
+                        .collect();
+                    let merged_offsets: Vec<Offset> = first_offsets
+                        .into_iter()
+                        .chain(second_offsets.into_iter())
+                        .collect();
+                    let node_type = NodeType::Internal(merged_offsets, merged_keys);
+                    Ok(Node::new(node_type, first.is_root, first.parent_offset))
+                } else {
+                    Err(Error::UnexpectedError)
+                }
+            }
+            NodeType::Unexpected => Err(Error::UnexpectedError),
+        }
     }
 
     /// print_sub_tree is a helper function for recursively printing the nodes rooted at a node given by its offset.
@@ -263,7 +368,7 @@ mod tests {
     #[test]
     fn search_works() -> Result<(), Error> {
         use crate::btree::BTreeBuilder;
-        use crate::node_type::{KeyValuePair};
+        use crate::node_type::KeyValuePair;
         use std::path::Path;
 
         let mut btree = BTreeBuilder::new()
