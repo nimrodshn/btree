@@ -1,15 +1,21 @@
+
+<p align="center">
+  <img src="docs/logo.png" width="300" height="230">
+</p>
+
 # btree
 
 [![Build status](https://github.com/nimrodshn/btree/actions/workflows/build.yml/badge.svg)](https://github.com/nimrodshn/btree/actions)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/nimrodshn/btree)](https://github.com/nimrodshn/btree/graphs/commit-activity)
 
-A **persistent** B+Tree implementation, designed as an index for a key value store, inspired by [SQLite](https://www.sqlite.org/index.html).
+A **persistent** B+Tree implementation, designed as an index for a key-value store, inspired by [SQLite](https://www.sqlite.org/index.html).
 
 ## Design
 Each `BTree` struct is associated with a file that contains its nodes. Each node has a predefined structure.
 
 Unit tests serve as helpful examples of API usage.
 
-## On disk nodes structure
+## On disk node structure
 There are two `NodeType` variants - `Internal` and `Leaf`; Each variant has its own predefined structure on disk.
 A leaf node has the following structure:
 ```
