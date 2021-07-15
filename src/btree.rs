@@ -232,7 +232,7 @@ impl BTree {
                 // we need to merge with a sibling.
                 // this can only occur if node is not the root (as it cannot "underflow").
                 // continue recoursively up the tree.
-                self.merge_if_needed(node, &key)?;
+                self.borrow_if_needed(node, &key)?;
             }
             NodeType::Internal(children, keys) => {
                 let node_idx = keys.binary_search(&key).unwrap_or_else(|x| x);
@@ -249,7 +249,7 @@ impl BTree {
     /// merge_if_needed checks the node for underflow (following a removal of a key),
     /// if it underflows it is merged with a sibling node, and than called recoursively 
     /// up the tree.
-    fn merge_if_needed(&mut self, node: Node, key: &Key) -> Result<(), Error> {
+    fn borrow_if_needed(&mut self, node: Node, key: &Key) -> Result<(), Error> {
         if self.is_node_underflow(&node)? {
             // Fetch the sibling from the parent -
             // This could be quicker if we implement sibling pointers.
@@ -263,10 +263,9 @@ impl BTree {
                     // The sibling is in idx +- 1 as the above index led
                     // the downward search to node.
                     let sibling_idx;
-                    if idx == keys.len() - 1 {
-                        sibling_idx = idx - 1;
-                    } else {
-                        sibling_idx = idx + 1;
+                    match idx > 0 {
+                        false => sibling_idx = idx + 1,
+                        true => sibling_idx = idx - 1,
                     }
 
                     let sibling_offset = children.get(sibling_idx).ok_or(Error::UnexpectedError)?;
@@ -284,7 +283,7 @@ impl BTree {
                     // write the updated parent back to disk and continue up the tree.
                     self.pager
                         .write_page_at_offset(Page::try_from(&parent_node)?, &parent_offset)?;
-                    return self.merge_if_needed(parent_node, &key);
+                    return self.borrow_if_needed(parent_node, &key);
                 }
                 _ => return Err(Error::UnexpectedError),
             }
