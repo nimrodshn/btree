@@ -224,10 +224,12 @@ impl BTree {
         let mut node = Node::try_from(page)?;
         match &mut node.node_type {
             NodeType::Leaf(ref mut pairs) => {
-                let node_idx = pairs
+                let key_idx = pairs
                     .binary_search_by_key(&key, |kv| Key(kv.key.clone()))
                     .map_err(|_| Error::KeyNotFound)?;
-                pairs.remove(node_idx);
+                pairs.remove(key_idx);
+                self.pager
+                    .write_page_at_offset(Page::try_from(&node)?, offset)?;
                 // Check for underflow - if it occures,
                 // we need to merge with a sibling.
                 // this can only occur if node is not the root (as it cannot "underflow").
@@ -246,8 +248,8 @@ impl BTree {
         Ok(())
     }
 
-    /// merge_if_needed checks the node for underflow (following a removal of a key),
-    /// if it underflows it is merged with a sibling node, and than called recoursively 
+    /// borrow_if_needed checks the node for underflow (following a removal of a key),
+    /// if it underflows it is merged with a sibling node, and than called recoursively
     /// up the tree.
     fn borrow_if_needed(&mut self, node: Node, key: &Key) -> Result<(), Error> {
         if self.is_node_underflow(&node)? {
@@ -386,8 +388,7 @@ mod tests {
         assert_eq!(kv.key, "c");
         assert_eq!(kv.value, "marhaba");
 
-        // Sanity check:
-        btree.print()
+        Ok(())
     }
 
     #[test]
@@ -446,7 +447,36 @@ mod tests {
         assert_eq!(kv.key, "i");
         assert_eq!(kv.value, "Ciao");
 
-        // Sanity check:
-        btree.print()
+        Ok(())
+    }
+
+    #[test]
+    fn delete_works() -> Result<(), Error> {
+        use crate::btree::BTreeBuilder;
+        use crate::error::Error;
+        use crate::node_type::{Key, KeyValuePair};
+        use std::path::Path;
+
+        let mut btree = BTreeBuilder::new()
+            .path(Path::new("/tmp/db"))
+            .b_parameter(2)
+            .build()?;
+        btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
+        btree.insert(KeyValuePair::new("e".to_string(), "salam".to_string()))?;
+        btree.insert(KeyValuePair::new("f".to_string(), "hallo".to_string()))?;
+        btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
+        btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
+        btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
+
+        let kv = btree.search("c".to_string())?;
+        assert_eq!(kv.key, "c");
+        assert_eq!(kv.value, "marhaba");
+
+        btree.delete(Key("c".to_string()))?;
+
+        let res = btree.search("c".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        Ok(())
     }
 }

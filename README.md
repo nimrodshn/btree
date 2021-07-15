@@ -2,10 +2,6 @@
 
 [![Build status](https://github.com/nimrodshn/btree/actions/workflows/build.yml/badge.svg)](https://github.com/nimrodshn/btree/actions)
 
-**IMPORTANT** 
-
-This project is ongoing and is considered a work-in-progress for educational purposes.
-
 A **persistent** B+Tree implementation, designed as an index for a key value store, inspired by [SQLite](https://www.sqlite.org/index.html).
 
 ## Design
@@ -53,7 +49,7 @@ let res = Node::try_from(page)?;
 
 See tests at `src/page.rs` and `src/node.rs` for more information.
 
-### Writing and Reading
+### Writing and Reading key-value pairs.
 ```
 // Initialize a new BTree;
 // The BTree nodes are stored in file '/tmp/db' (created if does not exist)
@@ -76,6 +72,38 @@ assert_eq!(kv.value, "hello");
 kv = btree.search("c".to_string())?;
 assert_eq!(kv.key, "c");
 assert_eq!(kv.value, "marhaba");
+```
+
+### Deleting key-value pairs.
+```
+// Initialize a new BTree.
+let mut btree = BTreeBuilder::new()
+      .path(Path::new("/tmp/db"))
+      .b_parameter(2)
+      .build()?;
+
+// Write some data.
+btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
+btree.insert(KeyValuePair::new("e".to_string(), "salam".to_string()))?;
+btree.insert(KeyValuePair::new("f".to_string(), "hallo".to_string()))?;
+btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
+btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
+btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
+
+// Find the key.
+let kv = btree.search("c".to_string())?;
+assert_eq!(kv.key, "c");
+assert_eq!(kv.value, "marhaba");
+
+// Delete the key.
+btree.delete(Key("c".to_string()))?;
+
+// Sanity check.
+let res = btree.search("c".to_string());
+assert!(matches!(
+      res,
+      Err(Error::KeyNotFound)
+));
 ```
 
 ## License
