@@ -260,7 +260,7 @@ impl BTree {
             let mut parent_node = Node::try_from(parent_page)?;
             // The parent has to be an "internal" node.
             match parent_node.node_type {
-                NodeType::Internal(ref mut children, ref keys) => {
+                NodeType::Internal(ref mut children, ref mut keys) => {
                     let idx = keys.binary_search(&key).unwrap_or_else(|x| x);
                     // The sibling is in idx +- 1 as the above index led
                     // the downward search to node.
@@ -276,11 +276,14 @@ impl BTree {
                     let merged_node = self.merge(node, sibling)?;
                     let merged_node_offset =
                         self.pager.write_page(Page::try_from(&merged_node)?)?;
-                    // remove the old nodes.
-                    children.remove(idx);
-                    children.remove(sibling_idx);
-                    // write the new node in place.
                     let merged_node_idx = cmp::min(idx, sibling_idx);
+                    // remove the old nodes.
+                    children.remove(merged_node_idx);
+                    // remove shifts nodes to the left.
+                    children.remove(merged_node_idx);
+                    // remove the keys that separated the two nodes from each other:
+                    keys.remove(idx);
+                    // write the new node in place.
                     children.insert(merged_node_idx, merged_node_offset);
                     // write the updated parent back to disk and continue up the tree.
                     self.pager
@@ -468,13 +471,20 @@ mod tests {
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
 
-        let kv = btree.search("c".to_string())?;
+        let mut kv = btree.search("c".to_string())?;
         assert_eq!(kv.key, "c");
         assert_eq!(kv.value, "marhaba");
 
         btree.delete(Key("c".to_string()))?;
+        let mut res = btree.search("c".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
 
-        let res = btree.search("c".to_string());
+        kv = btree.search("d".to_string())?;
+        assert_eq!(kv.key, "d");
+        assert_eq!(kv.value, "olah");
+
+        btree.delete(Key("d".to_string()))?;
+        res = btree.search("d".to_string());
         assert!(matches!(res, Err(Error::KeyNotFound)));
 
         Ok(())
