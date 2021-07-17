@@ -281,6 +281,12 @@ impl BTree {
                     children.remove(merged_node_idx);
                     // remove shifts nodes to the left.
                     children.remove(merged_node_idx);
+                    // if the parent is the root, and there is a single child - the merged node -
+                    // we can safely replace the root with the child.
+                    if parent_node.is_root && children.is_empty() {
+                        self.root_offset = merged_node_offset;
+                        return Ok(());
+                    }
                     // remove the keys that separated the two nodes from each other:
                     keys.remove(idx);
                     // write the new node in place.
@@ -485,6 +491,14 @@ mod tests {
 
         btree.delete(Key("d".to_string()))?;
         res = btree.search("d".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        btree.delete(Key("e".to_string()))?;
+        res = btree.search("e".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        btree.delete(Key("f".to_string()))?;
+        res = btree.search("f".to_string());
         assert!(matches!(res, Err(Error::KeyNotFound)));
 
         Ok(())
