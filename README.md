@@ -31,6 +31,13 @@ While the structure of an internal node on disk is the following:
 | Child Offset #0 - 8 bytes | Child offset #1 - 8 bytes | ...
 ```
 
+## Features
+- [X] Support all CRUD operations (read, write, delete).
+- [ ] Support for varied length key-value pairs.
+- [ ] Support for loading trees from disk (e.g. after node crash).
+- [ ] Key compression.
+- [ ] Garbage collection.
+
 ## API
 
 ### From disk to memory and back
