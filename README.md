@@ -43,7 +43,7 @@ While the structure of an internal node on disk is the following:
 ### From disk to memory and back
 Nodes are mapped to pages on disk with `TryFrom` methods implemented for easier de/serialization of nodes to pages and back.
 
-```
+```rust
 let some_leaf = Node::new(
    NodeType::Leaf(vec![
          KeyValuePair::new("foo".to_string(), "bar".to_string()),
@@ -63,7 +63,7 @@ let res = Node::try_from(page)?;
 See tests at `src/page.rs` and `src/node.rs` for more information.
 
 ### Writing and Reading key-value pairs.
-```
+```rust
 // Initialize a new BTree;
 // The BTree nodes are stored in file '/tmp/db' (created if does not exist)
 // with parameter b=2.
@@ -88,7 +88,7 @@ assert_eq!(kv.value, "marhaba");
 ```
 
 ### Deleting key-value pairs.
-```
+```rust
 // Initialize a new BTree.
 let mut btree = BTreeBuilder::new()
       .path(Path::new("/tmp/db"))
