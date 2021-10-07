@@ -34,12 +34,14 @@ pub const INTERNAL_NODE_HEADER_SIZE: usize =
 
 /// On a 64 bit machine the maximum space to keep all of the pointer
 /// is 200 * 8 = 1600 bytes.
+#[allow(dead_code)]
 pub const MAX_SPACE_FOR_CHILDREN: usize = MAX_BRANCHING_FACTOR * PTR_SIZE;
 
 /// This leaves the keys of an internal node 2478 bytes:
 /// We use 1990 bytes for keys which leaves 488 bytes as junk.
 /// This means each key is limited to 12 bytes. (2476 / keys limit = ~12)
 /// Rounded down to 10 to accomodate the leave node.
+#[allow(dead_code)]
 pub const MAX_SPACE_FOR_KEYS: usize =
     PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE - MAX_SPACE_FOR_CHILDREN;
 

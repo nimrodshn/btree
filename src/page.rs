@@ -60,7 +60,7 @@ impl Page {
         for idx in (offset..=end_offset).rev() {
             self.data[idx + size] = self.data[idx]
         }
-        self.data[offset..offset + size].clone_from_slice(&bytes);
+        self.data[offset..offset + size].clone_from_slice(bytes);
         Ok(())
     }
 
@@ -71,7 +71,7 @@ impl Page {
         offset: usize,
         size: usize,
     ) -> Result<(), Error> {
-        self.data[offset..offset + size].clone_from_slice(&bytes);
+        self.data[offset..offset + size].clone_from_slice(bytes);
         Ok(())
     }
 
