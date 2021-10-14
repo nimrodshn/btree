@@ -1,8 +1,20 @@
+use crate::error::Error;
+use crate::page_layout::PTR_SIZE;
 use std::cmp::{Eq, Ord, Ordering, PartialOrd};
 use std::convert::From;
+use std::convert::TryFrom;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Offset(pub usize);
+
+/// Converts an array of length len(usize) to a usize as a BigEndian integer.
+impl TryFrom<[u8; PTR_SIZE]> for Offset {
+    type Error = Error;
+
+    fn try_from(arr: [u8; PTR_SIZE]) -> Result<Self, Self::Error> {
+        Ok(Offset(usize::from_be_bytes(arr)))
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Debug)]
 pub struct Key(pub String);

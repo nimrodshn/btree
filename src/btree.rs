@@ -3,6 +3,7 @@ use crate::node::Node;
 use crate::node_type::{Key, KeyValuePair, NodeType, Offset};
 use crate::page::Page;
 use crate::pager::Pager;
+use crate::wal::Wal;
 use std::cmp;
 use std::convert::TryFrom;
 use std::path::Path;
@@ -16,7 +17,7 @@ pub const NODE_KEYS_LIMIT: usize = MAX_BRANCHING_FACTOR - 1;
 pub struct BTree {
     pager: Pager,
     b: usize,
-    root_offset: Offset,
+    wal: Wal,
 }
 
 /// BtreeBuilder is a Builder for the BTree struct.
@@ -54,21 +55,25 @@ impl BTreeBuilder {
             return Err(Error::UnexpectedError);
         }
 
-        let mut pager = Pager::new(&self.path)?;
+        let mut pager = Pager::new(self.path)?;
         let root = Node::new(NodeType::Leaf(vec![]), true, None);
         let root_offset = pager.write_page(Page::try_from(&root)?)?;
+        let parent_directory = self.path.parent().unwrap_or_else(|| Path::new("/tmp"));
+        let mut wal = Wal::new(parent_directory.to_path_buf())?;
+        wal.set_root(root_offset)?;
+
         Ok(BTree {
             pager,
             b: self.b,
-            root_offset,
+            wal,
         })
     }
 }
 
 impl Default for BTreeBuilder {
     // A default BTreeBuilder provides a builder with:
-    /// - b parameter set to 200
-    /// - path set to '/tmp/db'.
+    // - b parameter set to 200
+    // - path set to '/tmp/db'.
     fn default() -> Self {
         BTreeBuilder::new()
             .b_parameter(200)
@@ -96,40 +101,44 @@ impl BTree {
 
     /// insert a key value pair possibly splitting nodes along the way.
     pub fn insert(&mut self, kv: KeyValuePair) -> Result<(), Error> {
-        let root_page = self.pager.get_page(&self.root_offset)?;
+        let root_offset = self.wal.get_root()?;
+        let root_page = self.pager.get_page(&root_offset)?;
+        let new_root_offset: Offset;
+        let mut new_root: Node;
         let mut root = Node::try_from(root_page)?;
         if self.is_node_full(&root)? {
-            let mut old_root = &mut root;
-            let old_root_offset = self.root_offset.clone();
-            let mut new_root = Node::new(NodeType::Internal(vec![], vec![]), true, None);
-            // write the new root to disk.
-            let new_root_offset = self.pager.write_page(Page::try_from(&new_root)?)?;
-            // Set the current roots parent to the new root.
-            old_root.parent_offset = Some(new_root_offset.clone());
-            old_root.is_root = false;
-            // update the root offset.
-            self.root_offset = new_root_offset;
+            // split the root creating a new root and child nodes along the way.
+            new_root = Node::new(NodeType::Internal(vec![], vec![]), true, None);
+            // write the new root to disk to aquire an offset for the new root.
+            new_root_offset = self.pager.write_page(Page::try_from(&new_root)?)?;
+            // set the old roots parent to the new root.
+            root.parent_offset = Some(new_root_offset.clone());
+            root.is_root = false;
             // split the old root.
-            let (median, sibling) = old_root.split(self.b)?;
-            // Write the old root with its new data to disk.
-            self.pager
-                .write_page_at_offset(Page::try_from(&*old_root)?, &old_root_offset)?;
-            // Write the newly created sibling to disk.
+            let (median, sibling) = root.split(self.b)?;
+            // write the old root with its new data to disk in a *new* location.
+            let old_root_offset = self.pager.write_page(Page::try_from(&root)?)?;
+            // write the newly created sibling to disk.
             let sibling_offset = self.pager.write_page(Page::try_from(&sibling)?)?;
-            // Update the new root with its children and key.
+            // update the new root with its children and key.
             new_root.node_type =
                 NodeType::Internal(vec![old_root_offset, sibling_offset], vec![median]);
-            // Write the new_root to disk.
+            // write the new_root to disk.
             self.pager
-                .write_page_at_offset(Page::try_from(&new_root)?, &self.root_offset)?;
-            // Assign the new root.
-            root = new_root;
+                .write_page_at_offset(Page::try_from(&new_root)?, &new_root_offset)?;
+        } else {
+            new_root = root.clone();
+            new_root_offset = self.pager.write_page(Page::try_from(&new_root)?)?;
         }
-        self.insert_non_full(&mut root, self.root_offset.clone(), kv)
+        // continue recursively.
+        self.insert_non_full(&mut new_root, new_root_offset.clone(), kv)?;
+        // finish by setting the root to its new copy.
+        self.wal.set_root(new_root_offset)
     }
 
     /// insert_non_full (recursively) finds a node rooted at a given non-full node.
-    /// to insert a given kv pair.
+    /// to insert a given key-value pair. Here we assume the node is
+    /// already a copy of an existing node in a copy-on-write root to node traversal.
     fn insert_non_full(
         &mut self,
         node: &mut Node,
@@ -150,12 +159,17 @@ impl BTree {
                 let child_offset = children.get(idx).ok_or(Error::UnexpectedError)?.clone();
                 let child_page = self.pager.get_page(&child_offset)?;
                 let mut child = Node::try_from(child_page)?;
+                // Copy each branching-node on the root-to-leaf walk.
+                // write_page appends the given page to the db file thus creating a new node.
+                let new_child_offset = self.pager.write_page(Page::try_from(&child)?)?;
+                // Assign copied child at the proper place.
+                children[idx] = new_child_offset.to_owned();
                 if self.is_node_full(&child)? {
                     // split will split the child at b leaving the [0, b-1] keys
                     // while moving the set of [b, 2b-1] keys to the sibling.
                     let (median, mut sibling) = child.split(self.b)?;
                     self.pager
-                        .write_page_at_offset(Page::try_from(&child)?, &child_offset)?;
+                        .write_page_at_offset(Page::try_from(&child)?, &new_child_offset)?;
                     // Write the newly created sibling to disk.
                     let sibling_offset = self.pager.write_page(Page::try_from(&sibling)?)?;
                     // Siblings keys are larger than the splitted child thus need to be inserted
@@ -168,12 +182,14 @@ impl BTree {
                         .write_page_at_offset(Page::try_from(&*node)?, &node_offset)?;
                     // Continue recursively.
                     if kv.key <= median.0 {
-                        self.insert_non_full(&mut child, child_offset, kv)
+                        self.insert_non_full(&mut child, new_child_offset, kv)
                     } else {
                         self.insert_non_full(&mut sibling, sibling_offset, kv)
                     }
                 } else {
-                    self.insert_non_full(&mut child, child_offset, kv)
+                    self.pager
+                        .write_page_at_offset(Page::try_from(&*node)?, &node_offset)?;
+                    self.insert_non_full(&mut child, new_child_offset, kv)
                 }
             }
             NodeType::Unexpected => Err(Error::UnexpectedError),
@@ -182,7 +198,8 @@ impl BTree {
 
     /// search searches for a specific key in the BTree.
     pub fn search(&mut self, key: String) -> Result<KeyValuePair, Error> {
-        let root_page = self.pager.get_page(&self.root_offset)?;
+        let root_offset = self.wal.get_root()?;
+        let root_page = self.pager.get_page(&root_offset)?;
         let root = Node::try_from(root_page)?;
         self.search_node(root, &key)
     }
@@ -214,14 +231,25 @@ impl BTree {
 
     /// delete deletes a given key from the tree.
     pub fn delete(&mut self, key: Key) -> Result<(), Error> {
-        self.delete_key_from_subtree(key, &self.root_offset.clone())
+        let root_offset = self.wal.get_root()?;
+        let root_page = self.pager.get_page(&root_offset)?;
+        // Shadow the new root and rewrite it.
+        let mut new_root = Node::try_from(root_page)?;
+        let new_root_page = Page::try_from(&new_root)?;
+        let new_root_offset = self.pager.write_page(new_root_page)?;
+        self.delete_key_from_subtree(key, &mut new_root, &new_root_offset)?;
+        self.wal.set_root(new_root_offset)
     }
 
     /// delete key from subtree recursively traverses a tree rooted at a node in certain offset
-    /// until it finds the given key and delets.
-    fn delete_key_from_subtree(&mut self, key: Key, offset: &Offset) -> Result<(), Error> {
-        let page = self.pager.get_page(offset)?;
-        let mut node = Node::try_from(page)?;
+    /// until it finds the given key and delete the key-value pair. Here we assume the node is
+    /// already a copy of an existing node in a copy-on-write root to node traversal.
+    fn delete_key_from_subtree(
+        &mut self,
+        key: Key,
+        node: &mut Node,
+        node_offset: &Offset,
+    ) -> Result<(), Error> {
         match &mut node.node_type {
             NodeType::Leaf(ref mut pairs) => {
                 let key_idx = pairs
@@ -229,19 +257,31 @@ impl BTree {
                     .map_err(|_| Error::KeyNotFound)?;
                 pairs.remove(key_idx);
                 self.pager
-                    .write_page_at_offset(Page::try_from(&node)?, offset)?;
+                    .write_page_at_offset(Page::try_from(&*node)?, node_offset)?;
                 // Check for underflow - if it occures,
                 // we need to merge with a sibling.
                 // this can only occur if node is not the root (as it cannot "underflow").
                 // continue recoursively up the tree.
-                self.borrow_if_needed(node, &key)?;
+                self.borrow_if_needed(node.to_owned(), &key)?;
             }
             NodeType::Internal(children, keys) => {
                 let node_idx = keys.binary_search(&key).unwrap_or_else(|x| x);
-                // Retrieve child page from disk and deserialize.
-                // And continue recoursively.
+                // Retrieve child page from disk and deserialize,
+                // copy over the child page and continue recursively.
                 let child_offset = children.get(node_idx).ok_or(Error::UnexpectedError)?;
-                return self.delete_key_from_subtree(key, child_offset);
+                let child_page = self.pager.get_page(child_offset)?;
+                let mut child_node = Node::try_from(child_page)?;
+                // Fix the parent_offset as the child node is a child of a copied parent
+                // in a copy-on-write root to leaf traversal.
+                // This is important for the case of a node underflow which might require a leaf to root traversal.
+                child_node.parent_offset = Some(node_offset.to_owned());
+                let new_child_page = Page::try_from(&child_node)?;
+                let new_child_offset = self.pager.write_page(new_child_page)?;
+                // Assign the new pointer in the parent and continue reccoursively.
+                children[node_idx] = new_child_offset.to_owned();
+                self.pager
+                    .write_page_at_offset(Page::try_from(&*node)?, node_offset)?;
+                return self.delete_key_from_subtree(key, &mut child_node, &new_child_offset);
             }
             NodeType::Unexpected => return Err(Error::UnexpectedError),
         }
@@ -250,7 +290,8 @@ impl BTree {
 
     /// borrow_if_needed checks the node for underflow (following a removal of a key),
     /// if it underflows it is merged with a sibling node, and than called recoursively
-    /// up the tree.
+    /// up the tree. Since the downward root-to-leaf traversal was done using the copy-on-write
+    /// technique we are ensured that any merges will only be reflected in the copied parent in the path.
     fn borrow_if_needed(&mut self, node: Node, key: &Key) -> Result<(), Error> {
         if self.is_node_underflow(&node)? {
             // Fetch the sibling from the parent -
@@ -261,7 +302,7 @@ impl BTree {
             // The parent has to be an "internal" node.
             match parent_node.node_type {
                 NodeType::Internal(ref mut children, ref mut keys) => {
-                    let idx = keys.binary_search(&key).unwrap_or_else(|x| x);
+                    let idx = keys.binary_search(key).unwrap_or_else(|x| x);
                     // The sibling is in idx +- 1 as the above index led
                     // the downward search to node.
                     let sibling_idx;
@@ -284,7 +325,7 @@ impl BTree {
                     // if the parent is the root, and there is a single child - the merged node -
                     // we can safely replace the root with the child.
                     if parent_node.is_root && children.is_empty() {
-                        self.root_offset = merged_node_offset;
+                        self.wal.set_root(merged_node_offset)?;
                         return Ok(());
                     }
                     // remove the keys that separated the two nodes from each other:
@@ -294,7 +335,7 @@ impl BTree {
                     // write the updated parent back to disk and continue up the tree.
                     self.pager
                         .write_page_at_offset(Page::try_from(&parent_node)?, &parent_offset)?;
-                    return self.borrow_if_needed(parent_node, &key);
+                    return self.borrow_if_needed(parent_node, key);
                 }
                 _ => return Err(Error::UnexpectedError),
             }
@@ -367,7 +408,8 @@ impl BTree {
     /// print is a helper for recursively printing the tree.
     pub fn print(&mut self) -> Result<(), Error> {
         println!();
-        self.print_sub_tree("".to_string(), self.root_offset.clone())
+        let root_offset = self.wal.get_root()?;
+        self.print_sub_tree("".to_string(), root_offset)
     }
 }
 
@@ -455,7 +497,6 @@ mod tests {
         kv = btree.search("i".to_string())?;
         assert_eq!(kv.key, "i");
         assert_eq!(kv.value, "Ciao");
-
         Ok(())
     }
 
