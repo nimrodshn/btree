@@ -8,10 +8,11 @@
 [![Build status](https://github.com/nimrodshn/btree/actions/workflows/build.yml/badge.svg)](https://github.com/nimrodshn/btree/actions)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/nimrodshn/btree)](https://github.com/nimrodshn/btree/graphs/commit-activity)
 
-A **persistent** B+Tree implementation, designed as an index for a key-value store, inspired by [SQLite](https://www.sqlite.org/index.html).
+A *persistent copy-on-write* B+Tree implementation, designed as an index for a key-value store, inspired by [SQLite](https://www.sqlite.org/index.html).
 
 ## Design
-Each `BTree` struct is associated with a file that contains its nodes. Each node has a predefined structure.
+Each `BTree` struct is associated with a file that contains its nodes in a predefined structure.
+The `BTree` API is implemented in a copy-on-write manner, that is, a copy of the newly written nodes is created on each write or delete without mutating the previous version of the tree. To keep track of the latest version of the tree we maintain a write-ahead-log to log the current root.
 
 Unit tests serve as helpful examples of API usage.
 
@@ -33,8 +34,8 @@ While the structure of an internal node on disk is the following:
 
 ## Features
 - [X] Support all CRUD operations (read, write, delete).
+- [X] Support for crash recovery from disk.
 - [ ] Support for varied length key-value pairs.
-- [ ] Support for loading trees from disk (e.g. after node crash).
 - [ ] Key compression.
 - [ ] Garbage collection.
 
