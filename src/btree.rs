@@ -544,4 +544,54 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn delete_with_empty_sub_tree() -> Result<(), Error> {
+        use crate::btree::BTreeBuilder;
+        use crate::node_type::{Key, KeyValuePair};
+        use std::path::Path;
+
+        let mut btree = BTreeBuilder::new()
+            .path(Path::new("/tmp/db"))
+            .b_parameter(2)
+            .build()?;
+        btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
+        btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
+        btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
+        btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
+        btree.insert(KeyValuePair::new("e".to_string(), "salam".to_string()))?;
+        btree.insert(KeyValuePair::new("f".to_string(), "hallo".to_string()))?;
+        btree.insert(KeyValuePair::new("g".to_string(), "Konnichiwa".to_string()))?;
+        btree.insert(KeyValuePair::new("h".to_string(), "Ni hao".to_string()))?;
+        btree.insert(KeyValuePair::new("i".to_string(), "Ciao".to_string()))?;
+
+        btree.delete(Key("g".to_string()))?;
+        let mut res = btree.search("g".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        btree.delete(Key("h".to_string()))?;
+        res = btree.search("h".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        btree.delete(Key("a".to_string()))?;
+        res = btree.search("a".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+        
+        btree.delete(Key("b".to_string()))?;
+        res = btree.search("b".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+        
+        btree.delete(Key("c".to_string()))?;
+        res = btree.search("c".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        btree.delete(Key("d".to_string()))?;
+        res = btree.search("d".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+
+        btree.delete(Key("e".to_string()))?;
+        res = btree.search("e".to_string());
+        assert!(matches!(res, Err(Error::KeyNotFound)));
+        Ok(())
+    }
 }
