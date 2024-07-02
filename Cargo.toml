@@ -1,8 +1,11 @@
 [package]
 name = "btree"
 version = "0.1.0"
-authors = ["nshneor <nshneor@redhat.com>"]
+authors = ["Nimrod Shneor <nimrodshn@gmail.com>"]
 edition = "2018"
+description = "A persistent copy-on-write B+Tree implementation, designed as an index for a key-value store, inspired by SQLite."
+repository = "https://github.com/nimrodshn/btree"
+license = "MIT"
 
 [dependencies]
 byteorder = "1.3.4"
