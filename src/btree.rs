@@ -84,7 +84,7 @@ impl Default for BTreeBuilder {
 impl BTree {
     fn is_node_full(&self, node: &Node) -> Result<bool, Error> {
         match &node.node_type {
-            NodeType::Leaf(pairs) => Ok(pairs.len() == (2 * self.b - 1)),
+            NodeType::Leaf(pairs) => Ok(pairs.len() == (2 * self.b)),
             NodeType::Internal(_, keys) => Ok(keys.len() == (2 * self.b - 1)),
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
@@ -93,8 +93,8 @@ impl BTree {
     fn is_node_underflow(&self, node: &Node) -> Result<bool, Error> {
         match &node.node_type {
             // A root cannot really be "underflowing" as it can contain less than b-1 keys / pointers.
-            NodeType::Leaf(pairs) => Ok(pairs.len() < self.b - 1 && !node.is_root),
-            NodeType::Internal(_, keys) => Ok(keys.len() < self.b - 1 && !node.is_root),
+            NodeType::Leaf(pairs) => Ok(pairs.len() < (self.b - 1) && !node.is_root),
+            NodeType::Internal(_, keys) => Ok(keys.len() < (self.b - 1) && !node.is_root),
             NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
@@ -295,7 +295,7 @@ impl BTree {
     fn borrow_if_needed(&mut self, node: Node, key: &Key) -> Result<(), Error> {
         if self.is_node_underflow(&node)? {
             // Fetch the sibling from the parent -
-            // This could be quicker if we implement sibling pointers.
+            // TODO: This could be quicker if we implement sibling pointers.
             let parent_offset = node.parent_offset.clone().ok_or(Error::UnexpectedError)?;
             let parent_page = self.pager.get_page(&parent_offset)?;
             let mut parent_node = Node::try_from(parent_page)?;
