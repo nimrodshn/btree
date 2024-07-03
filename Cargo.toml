@@ -11,8 +11,8 @@ readme = "README.md"
 license = "MIT"
 
 [lib]
-name = "btree"           # The name of the target.
-path = "src/lib.rs"    # The source file of the target.
+name = "btree"
+path = "src/lib.rs"
 
 [dependencies]
 byteorder = "1.3.4"
