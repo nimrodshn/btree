@@ -5,6 +5,9 @@ authors = ["Nimrod Shneor <nimrodshn@gmail.com>"]
 edition = "2018"
 description = "A persistent copy-on-write B+Tree implementation, designed as an index for a key-value store, inspired by SQLite."
 repository = "https://github.com/nimrodshn/btree"
+key_words = ["btree", "data-structures", "databases"]
+categories = ["Data structures"]
+readme = "README.md"
 license = "MIT"
 
 [dependencies]
