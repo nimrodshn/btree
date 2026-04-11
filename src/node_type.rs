@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::page_layout::PTR_SIZE;
 use std::cmp::{Eq, Ord, Ordering, PartialOrd};
-use std::convert::From;
 use std::convert::TryFrom;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -57,28 +56,27 @@ pub enum NodeType {
 
     /// Leaf nodes contain a vector of Keys and values.
     Leaf(Vec<KeyValuePair>),
-
-    Unexpected,
 }
 
 // Converts a byte to a NodeType.
-impl From<u8> for NodeType {
-    fn from(orig: u8) -> NodeType {
+impl TryFrom<u8> for NodeType {
+    type Error = Error;
+
+    fn try_from(orig: u8) -> Result<Self, Self::Error> {
         match orig {
-            0x01 => NodeType::Internal(Vec::<Offset>::new(), Vec::<Key>::new()),
-            0x02 => NodeType::Leaf(Vec::<KeyValuePair>::new()),
-            _ => NodeType::Unexpected,
+            0x01 => Ok(NodeType::Internal(Vec::<Offset>::new(), Vec::<Key>::new())),
+            0x02 => Ok(NodeType::Leaf(Vec::<KeyValuePair>::new())),
+            _ => Err(Error::InvalidData),
         }
     }
 }
 
 // Converts a NodeType to a byte.
 impl From<&NodeType> for u8 {
-    fn from(orig: &NodeType) -> u8 {
+    fn from(orig: &NodeType) -> Self {
         match orig {
             NodeType::Internal(_, _) => 0x01,
             NodeType::Leaf(_) => 0x02,
-            NodeType::Unexpected => 0x03,
         }
     }
 }

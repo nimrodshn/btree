@@ -63,7 +63,6 @@ impl Node {
                     ),
                 ))
             }
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 }
@@ -74,7 +73,7 @@ impl TryFrom<Page> for Node {
     type Error = Error;
     fn try_from(page: Page) -> Result<Node, Error> {
         let raw = page.get_data();
-        let node_type = NodeType::from(raw[NODE_TYPE_OFFSET]);
+        let node_type = NodeType::try_from(raw[NODE_TYPE_OFFSET])?;
         let is_root = raw[IS_ROOT_OFFSET].from_byte();
         let parent_offset: Option<Offset>;
         if is_root {
@@ -139,8 +138,6 @@ impl TryFrom<Page> for Node {
                 }
                 Ok(Node::new(NodeType::Leaf(pairs), is_root, parent_offset))
             }
-
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 }
