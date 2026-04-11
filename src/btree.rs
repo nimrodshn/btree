@@ -86,7 +86,6 @@ impl BTree {
         match &node.node_type {
             NodeType::Leaf(pairs) => Ok(pairs.len() == (2 * self.b)),
             NodeType::Internal(_, keys) => Ok(keys.len() == (2 * self.b - 1)),
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 
@@ -95,7 +94,6 @@ impl BTree {
             // A root cannot really be "underflowing" as it can contain less than b-1 keys / pointers.
             NodeType::Leaf(pairs) => Ok(pairs.len() < (self.b - 1) && !node.is_root),
             NodeType::Internal(_, keys) => Ok(keys.len() < (self.b - 1) && !node.is_root),
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 
@@ -192,7 +190,6 @@ impl BTree {
                     self.insert_non_full(&mut child, new_child_offset, kv)
                 }
             }
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 
@@ -225,7 +222,6 @@ impl BTree {
                 }
                 Err(Error::KeyNotFound)
             }
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 
@@ -283,7 +279,6 @@ impl BTree {
                     .write_page_at_offset(Page::try_from(&*node)?, node_offset)?;
                 return self.delete_key_from_subtree(key, &mut child_node, &new_child_offset);
             }
-            NodeType::Unexpected => return Err(Error::UnexpectedError),
         }
         Ok(())
     }
@@ -377,7 +372,6 @@ impl BTree {
                     Err(Error::UnexpectedError)
                 }
             }
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 
@@ -401,7 +395,6 @@ impl BTree {
                 println!("{}Key value pairs: {:?}", curr_prefix, pairs);
                 Ok(())
             }
-            NodeType::Unexpected => Err(Error::UnexpectedError),
         }
     }
 

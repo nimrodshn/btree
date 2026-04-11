@@ -7,6 +7,7 @@ pub enum Error {
     ValueOverflowError,
     TryFromSliceError(&'static str),
     UTF8Error,
+    InvalidData,
 }
 
 impl std::convert::From<std::io::Error> for Error {

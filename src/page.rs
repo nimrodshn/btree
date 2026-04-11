@@ -169,7 +169,6 @@ impl TryFrom<&Node> for Page {
                     page_offset += VALUE_SIZE;
                 }
             }
-            NodeType::Unexpected => return Err(Error::UnexpectedError),
         }
 
         Ok(Page::new(data))
