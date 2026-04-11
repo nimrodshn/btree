@@ -415,18 +415,16 @@ impl BTree {
 
 #[cfg(test)]
 mod tests {
+    use crate::btree::{BTree, BTreeBuilder};
     use crate::error::Error;
+    use tempfile::TempDir;
 
     #[test]
     fn search_works() -> Result<(), Error> {
-        use crate::btree::BTreeBuilder;
         use crate::node_type::KeyValuePair;
-        use std::path::Path;
 
-        let mut btree = BTreeBuilder::new()
-            .path(Path::new("/tmp/db"))
-            .b_parameter(2)
-            .build()?;
+        let dir = tempfile::tempdir()?; // Deleted on drop.
+        let mut btree = create_temp_btree(dir)?;
         btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
@@ -444,14 +442,10 @@ mod tests {
 
     #[test]
     fn insert_works() -> Result<(), Error> {
-        use crate::btree::BTreeBuilder;
         use crate::node_type::KeyValuePair;
-        use std::path::Path;
 
-        let mut btree = BTreeBuilder::new()
-            .path(Path::new("/tmp/db"))
-            .b_parameter(2)
-            .build()?;
+        let dir = tempfile::tempdir()?; // Deleted on drop.
+        let mut btree = create_temp_btree(dir)?;
         btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
@@ -502,15 +496,11 @@ mod tests {
 
     #[test]
     fn delete_works() -> Result<(), Error> {
-        use crate::btree::BTreeBuilder;
         use crate::error::Error;
         use crate::node_type::{Key, KeyValuePair};
-        use std::path::Path;
 
-        let mut btree = BTreeBuilder::new()
-            .path(Path::new("/tmp/db"))
-            .b_parameter(2)
-            .build()?;
+        let dir = tempfile::tempdir()?; // Deleted on drop.
+        let mut btree = create_temp_btree(dir)?;
         btree.insert(KeyValuePair::new("d".to_string(), "olah".to_string()))?;
         btree.insert(KeyValuePair::new("e".to_string(), "salam".to_string()))?;
         btree.insert(KeyValuePair::new("f".to_string(), "hallo".to_string()))?;
@@ -547,14 +537,10 @@ mod tests {
 
     #[test]
     fn delete_with_empty_sub_tree() -> Result<(), Error> {
-        use crate::btree::BTreeBuilder;
         use crate::node_type::{Key, KeyValuePair};
-        use std::path::Path;
 
-        let mut btree = BTreeBuilder::new()
-            .path(Path::new("/tmp/db"))
-            .b_parameter(2)
-            .build()?;
+        let dir = tempfile::tempdir()?; // Deleted on drop.
+        let mut btree = create_temp_btree(dir)?;
         btree.insert(KeyValuePair::new("a".to_string(), "shalom".to_string()))?;
         btree.insert(KeyValuePair::new("b".to_string(), "hello".to_string()))?;
         btree.insert(KeyValuePair::new("c".to_string(), "marhaba".to_string()))?;
@@ -576,11 +562,11 @@ mod tests {
         btree.delete(Key("a".to_string()))?;
         res = btree.search("a".to_string());
         assert!(matches!(res, Err(Error::KeyNotFound)));
-        
+
         btree.delete(Key("b".to_string()))?;
         res = btree.search("b".to_string());
         assert!(matches!(res, Err(Error::KeyNotFound)));
-        
+
         btree.delete(Key("c".to_string()))?;
         res = btree.search("c".to_string());
         assert!(matches!(res, Err(Error::KeyNotFound)));
@@ -593,5 +579,14 @@ mod tests {
         res = btree.search("e".to_string());
         assert!(matches!(res, Err(Error::KeyNotFound)));
         Ok(())
+    }
+
+    fn create_temp_btree(dir: TempDir) -> Result<BTree, Error> {
+        let db_path = dir.path().join("db");
+        let btree = BTreeBuilder::new()
+            .path(Box::leak(db_path.into_boxed_path()))
+            .b_parameter(2)
+            .build()?;
+        Ok(btree)
     }
 }
